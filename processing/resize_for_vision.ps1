@@ -19,15 +19,15 @@ if (-not (Test-Path $thumbsFolder)) {
     Write-Host "✅ Created folder: $thumbsFolder" -ForegroundColor Green
 }
 
-# Python скрипт для обработки изображений
-$pythonScript = @"
+# Python скрипт для обработки изображений: записываем во временный .py файл
+$pyContent = @'
 import os
 import sys
 from PIL import Image
-import math
 
-image_folder = r'$ImageFolder'
-thumbs_folder = r'$thumbsFolder'
+# placeholders will be replaced by PowerShell
+image_folder = r"__IMAGEFOLDER__"
+thumbs_folder = r"__THUMBSFOLDER__"
 
 # Целевые размеры и их соотношения
 target_sizes = {
@@ -49,74 +49,71 @@ for filename in jpg_files:
     filepath = os.path.join(image_folder, filename)
     
     try:
-        # Открываем оригинальное изображение
         img = Image.open(filepath)
-        original_size = img.size  # (width, height)
-        
-        # Вычисляем соотношение сторон
+        original_size = img.size
         aspect_ratio = original_size[0] / original_size[1]
-        
-        # Находим ближайший целевой размер
-        best_size = min(target_sizes.keys(), 
-                       key=lambda x: abs(target_sizes[x] - aspect_ratio))
-        
+
+        best_size = min(target_sizes.keys(), key=lambda x: abs(target_sizes[x] - aspect_ratio))
         target_width, target_height = best_size
-        target_ar = target_sizes[best_size]
-        
-        # Пропорциональное масштабирование с letterboxing
-        scale_factor = min(target_width / original_size[0], 
-                          target_height / original_size[1])
-        
+
+        scale_factor = min(target_width / original_size[0], target_height / original_size[1])
         new_width = int(original_size[0] * scale_factor)
         new_height = int(original_size[1] * scale_factor)
-        
-        # Создаем новое изображение с фоном
+
         new_img = Image.new('RGB', (target_width, target_height), (0, 0, 0))
-        
-        # Масштабируем оригинал
         resized = img.convert('RGB').resize((new_width, new_height), Image.Resampling.LANCZOS)
-        
-        # Вставляем отмасштабированное изображение в центр
+
         offset_x = (target_width - new_width) // 2
         offset_y = (target_height - new_height) // 2
         new_img.paste(resized, (offset_x, offset_y))
-        
-        # Сохраняем в THMBS
+
         output_path = os.path.join(thumbs_folder, filename)
         new_img.save(output_path, 'JPEG', quality=85, optimize=True)
-        
+
         print(f'✅ {filename}')
         print(f'   Original: {original_size[0]}×{original_size[1]} (AR: {aspect_ratio:.2f})')
         print(f'   Resized to: {target_width}×{target_height}')
         print(f'   Saved to: THMBS/{filename}')
-        
+
     except Exception as e:
         print(f'❌ ERROR: {filename}')
         print(f'   {str(e)}')
-    
+
     print()
 
 print('=' * 50)
 print('Processing completed!')
-"@
+'@
 
-# Запускаем Python скрипт
 Write-Host "Starting image processing..." -ForegroundColor Cyan
 
-# Получаем путь к Python из venv
-$pythonExe = Join-Path -Path (Split-Path -Path $ImageFolder) -ChildPath "venv\Scripts\python.exe"
+# Создаем временный python файл в %TEMP%
+$tempPy = Join-Path -Path $env:TEMP -ChildPath ("resize_for_vision_{0}.py" -f ([System.Guid]::NewGuid().ToString()))
 
-# Если venv не найден, пробуем использовать глобальный python
-if (-not (Test-Path $pythonExe)) {
-    $pythonExe = "python"
-}
+# Заменяем плейсхолдеры безопасно (экранируем обратные слэши)
+$safeImageFolder = $ImageFolder -replace "\\", "\\\\"
+$safeThumbsFolder = $thumbsFolder -replace "\\", "\\\\"
 
-$pythonScript | & $pythonExe
+$pyContent = $pyContent -replace "__IMAGEFOLDER__", $safeImageFolder
+$pyContent = $pyContent -replace "__THUMBSFOLDER__", $safeThumbsFolder
+
+$pyContent | Out-File -FilePath $tempPy -Encoding UTF8
+
+# Получаем путь к Python из venv (ищем venv рядом с репозиторием root)
+$repoRoot = Split-Path -Path $PSScriptRoot -Parent
+$pythonExe = Join-Path -Path $repoRoot -ChildPath "venv\Scripts\python.exe"
+if (-not (Test-Path $pythonExe)) { $pythonExe = "python" }
+
+# Запускаем временный python скрипт
+& $pythonExe $tempPy
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "❌ Python script failed!" -ForegroundColor Red
+    Remove-Item -Force $tempPy -ErrorAction SilentlyContinue
     exit 1
 }
+
+Remove-Item -Force $tempPy -ErrorAction SilentlyContinue
 
 Write-Host ""
 Write-Host "=== Resize Complete ===" -ForegroundColor Green
