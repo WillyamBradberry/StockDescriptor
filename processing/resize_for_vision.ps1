@@ -121,19 +121,19 @@ Write-Host "Thumbnails saved to: $thumbsFolder" -ForegroundColor Green
 Write-Host ""
 
 # Предлагаем запустить write_exif.ps1
-$writeExifPath = Join-Path -Path (Split-Path -Path $ImageFolder) -ChildPath "write_exif.ps1"
+$writeExifPath = Join-Path -Path (Split-Path -Path $ImageFolder) -ChildPath 'write_exif.ps1'
 
 if (Test-Path $writeExifPath) {
-    Write-Host "Do you want to inject metadata into original images?" -ForegroundColor Yellow
-    Write-Host "This will run: write_exif.ps1" -ForegroundColor Gray
-    
-    $response = Read-Host "Continue? (y/n)"
-    
-    if ($response -eq 'y' -or $response -eq 'Y') {
-        Write-Host ""
-        Write-Host "Running write_exif.ps1..." -ForegroundColor Cyan
+    Write-Host 'Do you want to inject metadata into original images?' -ForegroundColor Yellow
+    Write-Host 'This will run: write_exif.ps1' -ForegroundColor Gray
+
+    $response = Read-Host 'Continue? (y/n)'
+
+    if ($response -match '^[yY]$') {
+        Write-Host ''
+        Write-Host 'Running write_exif.ps1...' -ForegroundColor Cyan
         & $writeExifPath -OriginalFolder $ImageFolder
     }
 } else {
-    Write-Host "ℹ️  write_exif.ps1 not found in parent directory" -ForegroundColor Gray
+    Write-Host 'Info: write_exif.ps1 not found' -ForegroundColor Gray
 }
