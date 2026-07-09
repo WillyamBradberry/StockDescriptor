@@ -29,12 +29,7 @@ from PIL import Image
 image_folder = r"__IMAGEFOLDER__"
 thumbs_folder = r"__THUMBSFOLDER__"
 
-# Целевые размеры и их соотношения
-target_sizes = {
-    (1200, 800): 1.5,      # 3:2
-    (1024, 1024): 1.0,     # 1:1
-    (1280, 720): 1.777778  # 16:9
-}
+max_width = 1024
 
 jpg_files = [f for f in os.listdir(image_folder) if f.lower().endswith(('.jpg', '.jpeg'))]
 
@@ -50,29 +45,21 @@ for filename in jpg_files:
     
     try:
         img = Image.open(filepath)
-        original_size = img.size
-        aspect_ratio = original_size[0] / original_size[1]
+        w, h = img.size
 
-        best_size = min(target_sizes.keys(), key=lambda x: abs(target_sizes[x] - aspect_ratio))
-        target_width, target_height = best_size
-
-        scale_factor = min(target_width / original_size[0], target_height / original_size[1])
-        new_width = int(original_size[0] * scale_factor)
-        new_height = int(original_size[1] * scale_factor)
-
-        new_img = Image.new('RGB', (target_width, target_height), (0, 0, 0))
-        resized = img.convert('RGB').resize((new_width, new_height), Image.Resampling.LANCZOS)
-
-        offset_x = (target_width - new_width) // 2
-        offset_y = (target_height - new_height) // 2
-        new_img.paste(resized, (offset_x, offset_y))
+        # Resize proportionally only if width > max_width
+        if w > max_width:
+            new_w = max_width
+            new_h = int(h * (new_w / w))
+            resized = img.convert('RGB').resize((new_w, new_h), Image.Resampling.LANCZOS)
+        else:
+            resized = img.convert('RGB')
 
         output_path = os.path.join(thumbs_folder, filename)
-        new_img.save(output_path, 'JPEG', quality=85, optimize=True)
+        resized.save(output_path, 'JPEG', quality=85, optimize=True)
 
         print(f'✅ {filename}')
-        print(f'   Original: {original_size[0]}×{original_size[1]} (AR: {aspect_ratio:.2f})')
-        print(f'   Resized to: {target_width}×{target_height}')
+        print(f'   Original: {w}×{h}')
         print(f'   Saved to: THMBS/{filename}')
 
     except Exception as e:
