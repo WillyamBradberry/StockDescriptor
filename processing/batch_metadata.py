@@ -126,6 +126,48 @@ Output strictly in this format for each image as shown in examples in the README
     return METADATA_FILE
 
 
+def generate_preview_file(image_folder: Path, metadata_file: Path, thumbs_folder: Path):
+    import re
+
+    preview_file = image_folder / 'METADATA_PREVIEW.md'
+    text = metadata_file.read_text(encoding='utf-8')
+
+    # Find blocks starting with ## filename.jpg
+    pattern = re.compile(r'##\s*(.+?\.jpg)\s*(.*?)(?=\n##\s*.+?\.jpg|\Z)', re.S | re.I)
+    matches = pattern.findall(text)
+
+    if not matches:
+        print('No metadata blocks found to build preview.')
+        return preview_file
+
+    lines = ["# Metadata Preview\n"]
+
+    for filename, block in matches:
+        thumb_rel = f"THMBS/{filename}"
+        # extract Title, Description, Keywords
+        title_m = re.search(r"\*\*Title:\*\*\s*```\s*(.*?)\s*```", block, re.S)
+        desc_m = re.search(r"\*\*Description:\*\*\s*```\s*(.*?)\s*```", block, re.S)
+        kw_m = re.search(r"\*\*Keywords:\*\*\s*```\s*(.*?)\s*```", block, re.S)
+
+        title = title_m.group(1).strip() if title_m else ''
+        desc = desc_m.group(1).strip() if desc_m else ''
+        kws = kw_m.group(1).strip() if kw_m else ''
+
+        lines.append(f"## {filename}\n")
+        lines.append(f"![]({thumb_rel})\n")
+        if title:
+            lines.append(f"**Title:** {title}\n")
+        if desc:
+            lines.append(f"**Description:** {desc}\n")
+        if kws:
+            lines.append(f"**Keywords:** {kws}\n")
+        lines.append('\n---\n')
+
+    preview_file.write_text('\n'.join(lines), encoding='utf-8')
+    print(f'Preview file generated: {preview_file}')
+    return preview_file
+
+
 def run_write_exif(image_folder: Path, script_path: Path):
     # Run PowerShell script to inject metadata
     print(f"Запуск {script_path} для папки {image_folder}")
@@ -167,6 +209,11 @@ def main():
     if not metadata_file:
         print('Metadata generation failed or no thumbnails found.')
         return
+    # generate preview file for quick review
+    try:
+        generate_preview_file(image_folder, Path(metadata_file), thumbs_folder)
+    except Exception as e:
+        print(f'Failed to generate preview: {e}')
 
     if args.no_inject:
         print('Skipping EXIF injection as requested.')
