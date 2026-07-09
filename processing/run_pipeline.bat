@@ -41,12 +41,8 @@ if errorlevel 1 (
 )
 
 echo.
-echo 3) Metadata generation finished.
+echo 3) Metadata generation finished. Now injecting metadata into originals...
 
-choice /M "Do you want to inject metadata into original images now?"
-if errorlevel 2 goto SKIP_INJECT
-
-echo Running write_exif.ps1...
 powershell -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%write_exif.ps1" -OriginalFolder "%IMAGE_FOLDER%"
 if errorlevel 1 (
   echo Error: write_exif.ps1 failed.
@@ -54,7 +50,6 @@ if errorlevel 1 (
   exit /b 1
 )
 
-:SKIP_INJECT
 echo.
 echo Pipeline completed.
 endlocal
