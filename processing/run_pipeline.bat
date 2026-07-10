@@ -1,6 +1,7 @@
 @echo off
-rem Run pipeline: resize -> metadata -> optional exif injection
+rem Run pipeline: resize -> metadata -> exif injection -> obsidian nav
 rem Usage: run_pipeline.bat "C:\path\to\images"
+rem Test:   run_pipeline.bat "D:\projects\photo\2017_03_16_waves\test"
 
 setlocal enabledelayedexpansion
 
@@ -33,7 +34,9 @@ if not exist "%PYTHON_EXE%" (
   set "PYTHON_EXE=python"
 )
 
-"%PYTHON_EXE%" "%SCRIPT_DIR%batch_metadata.py" "%IMAGE_FOLDER%"
+rem Run batch_metadata in metadata-only mode (no EXIF injection, no nav)
+rem Python handles: LLM analysis, METADATA.md, METADATA_PREVIEW.md
+"%PYTHON_EXE%" "%SCRIPT_DIR%batch_metadata.py" "%IMAGE_FOLDER%" --no-inject --no-nav
 if errorlevel 1 (
   echo Error: batch_metadata.py failed.
   pause
@@ -41,8 +44,7 @@ if errorlevel 1 (
 )
 
 echo.
-echo 3) Metadata generation finished. Now injecting metadata into originals...
-
+echo 3) Injecting metadata into original images...
 powershell -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%write_exif.ps1" -OriginalFolder "%IMAGE_FOLDER%"
 if errorlevel 1 (
   echo Error: write_exif.ps1 failed.
@@ -51,6 +53,13 @@ if errorlevel 1 (
 )
 
 echo.
-echo Pipeline completed.
+echo 4) Generating Obsidian navigation file...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%create-metadata-nav-modified.ps1" -MetadataFile "%IMAGE_FOLDER%\METADATA.md"
+if errorlevel 1 (
+  echo Warning: create-metadata-nav-modified.ps1 had issues.
+)
+
+echo.
+echo === Pipeline completed. ===
 endlocal
 exit /b 0

@@ -42,7 +42,14 @@ print('-' * 50)
 
 for filename in jpg_files:
     filepath = os.path.join(image_folder, filename)
-    
+    output_path = os.path.join(thumbs_folder, filename)
+
+    # Skip if thumbnail already exists
+    if os.path.exists(output_path):
+        print(f'⏭️  {filename} (already exists, skipped)')
+        print()
+        continue
+
     try:
         img = Image.open(filepath)
         w, h = img.size
@@ -55,7 +62,6 @@ for filename in jpg_files:
         else:
             resized = img.convert('RGB')
 
-        output_path = os.path.join(thumbs_folder, filename)
         resized.save(output_path, 'JPEG', quality=85, optimize=True)
 
         print(f'✅ {filename}')
