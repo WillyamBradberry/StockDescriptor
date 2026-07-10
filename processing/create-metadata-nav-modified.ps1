@@ -9,7 +9,7 @@
     [int]$Columns = 4,
 
     [Parameter(Mandatory=$false)]
-    [string]$ThumbsDir = "../THMBS"
+    [string]$ThumbsDir = "./THMBS"
 )
 
 $OutputEncoding = [System.Text.Encoding]::UTF8
@@ -22,6 +22,10 @@ $originalContent = Get-Content $mdPath -Raw -Encoding UTF8
 
 # Удаляем старую навигацию
 $content = $originalContent -replace '(?s)^## Навигация.+?^---\s*\n', ''
+
+# Вставляем [[## Навигация]] после секции Keywords (закрывающие ``` на ту же строку)
+$nl = "`n"
+$content = $content -replace '(\*\*Keywords:\*\*\s*```\s*\n)([^`\n]+)\n```\s*\n---', ('$1$2'+ $nl + '```' + $nl + '[[## Навигация]]' + $nl + '---')
 
 $blocks = [regex]::Split($content, '(?=^## )', [System.Text.RegularExpressions.RegexOptions]::Multiline) `
     | Where-Object { $_ -match '##\s+\S+\.jpg' }
@@ -39,7 +43,7 @@ foreach ($block in $blocks) {
         [System.Text.RegularExpressions.RegexOptions]::Singleline)
     $title = if ($titleMatch.Success) { $titleMatch.Groups[1].Value.Trim() } else { $filename }
     $shortTitle = if ($title.Length -gt 90) { $title.Substring(0,87) + "..." } else { $title }
-    $safeTitle = $shortTitle -replace '"', '&quot;'
+    $safeTitle = $shortTitle -replace '"', '"'
     $thumbSrc  = "$ThumbsDir/$filename"
 
     # Картинка с тултипом + крохотная ссылка-стрелка под ней (единственный способ навигации в Obsidian)
