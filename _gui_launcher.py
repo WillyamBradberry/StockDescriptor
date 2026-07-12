@@ -4,14 +4,6 @@ StockDescriptor GUI Launcher
 Beautiful modern GUI for batch stock photo metadata generation.
 Supports LM Studio (local) and Google Gemini (online) with persistent user config.
 Multilingual: English / Русский
-
-CHANGELOG:
-- Main window now uses grid layout with proper weight for auto-resize
-- Upload settings window is scalable and clamps to screen bounds
-- Password fields have eye toggle (👁/🙈) in upload settings
-- ESC closes SettingsWindow and UploadSettingsWindow
-- Gear icon (⚙️) aligned in one row with "Upload to Stock Platforms" header
-- Auto-upload checkbox moved next to Execution Log header, state saved to config
 """
 
 import customtkinter as ctk
@@ -154,7 +146,7 @@ LANGUAGES = {
         "upload_path_label": "Remote path:",
         "upload_save_ok": "Upload settings saved successfully!",
         "upload_save_err": "Failed to save upload config.",
-        "auto_upload": "Auto-upload to stocks after EXIF injection",
+        "auto_upload": "📤 Auto-upload to stocks after pipeline",
         "show_password": "Show password",
         "hide_password": "Hide password",
         "lang_toggle": "EN",
@@ -259,7 +251,7 @@ LANGUAGES = {
         "upload_path_label": "Удалённый путь:",
         "upload_save_ok": "Настройки загрузки успешно сохранены!",
         "upload_save_err": "Не удалось сохранить конфиг загрузки.",
-        "auto_upload": "Автозагрузка на стоки после EXIF",
+        "auto_upload": "📤 Автоматически загружать на стоки после обработки",
         "show_password": "Показать пароль",
         "hide_password": "Скрыть пароль",
         "lang_toggle": "RU",
@@ -271,6 +263,7 @@ LANGUAGES = {
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
+# Colors
 ACCENT_COLOR = "#2E8B57"
 DARK_BG = "#1E1E2E"
 CARD_BG = "#25253A"
@@ -293,36 +286,16 @@ class StockDescriptorGUI(ctk.CTk):
         self.worker_thread: Optional[threading.Thread] = None
         self.is_running = False
         self.is_uploading = False
-
-        self.title(self.tr("window_title"))
-        self._setup_geometry()
-        self.minsize(900, 700)
-
-        # Grid layout for main window
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(1, weight=1)
-        self.grid_rowconfigure(2, weight=0)
-
         self._build_ui()
         self._load_last_folder()
         self._poll_log_queue()
+        self.center_window()
 
     def tr(self, key: str, *args) -> str:
         val = LANGUAGES.get(self.lang, LANGUAGES["ru"]).get(key, key)
         if args:
             return val.format(*args)
         return val
-
-    def _setup_geometry(self):
-        """Center window and size it to 85% of screen, but cap at reasonable max."""
-        self.update_idletasks()
-        sw = self.winfo_screenwidth()
-        sh = self.winfo_screenheight()
-        w = min(1100, int(sw * 0.85))
-        h = min(850, int(sh * 0.85))
-        x = max(20, (sw - w) // 2)
-        y = max(30, (sh - h) // 2)
-        self.geometry(f"{w}x{h}+{x}+{y}")
 
     def _toggle_language(self):
         self.lang = "en" if self.lang == "ru" else "ru"
@@ -346,11 +319,12 @@ class StockDescriptorGUI(ctk.CTk):
         self.status_label.configure(text=self.tr("status_ready"))
         self.hint_label.configure(text=self.tr("hint"))
         self.lang_btn.configure(text=self.tr("lang_toggle"))
-        self.auto_upload_cb.configure(text=self.tr("auto_upload"))
         if hasattr(self, 'upload_section_label'):
             self.upload_section_label.configure(text=self.tr("upload_section"))
         if hasattr(self, 'upload_start_btn'):
             self.upload_start_btn.configure(text=self.tr("upload_start_btn"))
+        if hasattr(self, 'auto_upload_cb'):
+            self.auto_upload_cb.configure(text=self.tr("auto_upload"))
         for platform_key in ["shutterstock", "adobe", "pond5"]:
             cb = getattr(self, f'{platform_key}_checkbox', None)
             if cb:
@@ -360,23 +334,32 @@ class StockDescriptorGUI(ctk.CTk):
         else:
             self.upload_status_label.configure(text="")
 
+    def center_window(self):
+        self.update_idletasks()
+        screen_w = self.winfo_screenwidth()
+        screen_h = self.winfo_screenheight()
+        w = min(900, int(screen_w * 0.75))
+        h = min(750, int(screen_h * 0.8))
+        x = max(20, (screen_w - w) // 2)
+        y = max(30, (screen_h - h) // 2)
+        self.geometry(f"{w}x{h}+{x}+{y}")
+
     def _build_ui(self):
-        # === Header (row 0) ===
+        # Top header
         header_frame = ctk.CTkFrame(self, height=70, corner_radius=0, fg_color=DARK_BG)
-        header_frame.grid(row=0, column=0, sticky="new")
-        header_frame.grid_columnconfigure(1, weight=1)
+        header_frame.pack(fill="x", padx=0, pady=0)
 
         self.title_label = ctk.CTkLabel(
             header_frame, text=self.tr("app_title"),
             font=ctk.CTkFont(size=28, weight="bold"), text_color="#E0E7FF"
         )
-        self.title_label.grid(row=0, column=0, padx=25, pady=15, sticky="w")
+        self.title_label.pack(side="left", padx=25, pady=15)
 
         self.subtitle_label = ctk.CTkLabel(
             header_frame, text=self.tr("app_subtitle"),
             font=ctk.CTkFont(size=13), text_color="#94A3B8"
         )
-        self.subtitle_label.grid(row=0, column=1, padx=10, pady=20, sticky="w")
+        self.subtitle_label.pack(side="left", padx=10, pady=20)
 
         self.lang_btn = ctk.CTkButton(
             header_frame, text=self.tr("lang_toggle"),
@@ -385,7 +368,7 @@ class StockDescriptorGUI(ctk.CTk):
             font=ctk.CTkFont(size=13, weight="bold"),
             command=self._toggle_language
         )
-        self.lang_btn.grid(row=0, column=3, padx=(0, 10), pady=17, sticky="e")
+        self.lang_btn.pack(side="right", padx=(0, 10), pady=17)
 
         self.settings_btn = ctk.CTkButton(
             header_frame, text=self.tr("settings_btn"),
@@ -393,17 +376,15 @@ class StockDescriptorGUI(ctk.CTk):
             fg_color="#334155", hover_color="#475569",
             command=self.open_settings_window
         )
-        self.settings_btn.grid(row=0, column=2, padx=(0, 5), pady=17, sticky="e")
+        self.settings_btn.pack(side="right", padx=(0, 5), pady=17)
 
-        # === Scrollable main content (row 1) ===
+        # Scrollable main content
         scroll_frame = ctk.CTkScrollableFrame(self, corner_radius=0, fg_color="transparent")
-        scroll_frame.grid(row=1, column=0, sticky="nsew", padx=0, pady=0)
-        scroll_frame.grid_columnconfigure(0, weight=1)
+        scroll_frame.pack(fill="both", expand=True, padx=0, pady=0)
 
         main_card = ctk.CTkFrame(scroll_frame, corner_radius=16, fg_color=CARD_BG)
         main_card.pack(fill="both", expand=True, padx=20, pady=(10, 15))
 
-        # Folder selection
         self.folder_label = ctk.CTkLabel(
             main_card, text=self.tr("folder_label"),
             font=ctk.CTkFont(size=15, weight="bold"), anchor="w"
@@ -412,13 +393,12 @@ class StockDescriptorGUI(ctk.CTk):
 
         folder_frame = ctk.CTkFrame(main_card, fg_color="transparent")
         folder_frame.pack(fill="x", padx=25, pady=(0, 15))
-        folder_frame.grid_columnconfigure(0, weight=1)
 
         self.folder_entry = ctk.CTkEntry(
             folder_frame, placeholder_text=self.tr("folder_placeholder"),
             height=42, corner_radius=10, font=ctk.CTkFont(size=13)
         )
-        self.folder_entry.grid(row=0, column=0, padx=(0, 10), sticky="ew")
+        self.folder_entry.pack(side="left", padx=(0, 10), fill="x", expand=True)
 
         self.browse_btn = ctk.CTkButton(
             folder_frame, text=self.tr("browse_btn"),
@@ -426,9 +406,8 @@ class StockDescriptorGUI(ctk.CTk):
             fg_color="#475569", hover_color="#64748B",
             command=self.browse_folder
         )
-        self.browse_btn.grid(row=0, column=1, sticky="e")
+        self.browse_btn.pack(side="right")
 
-        # Action row
         action_frame = ctk.CTkFrame(main_card, fg_color="transparent")
         action_frame.pack(fill="x", padx=25, pady=(5, 15))
 
@@ -441,7 +420,6 @@ class StockDescriptorGUI(ctk.CTk):
         )
         self.run_btn.pack(fill="x", pady=(5, 0))
 
-        # Info row
         info_row = ctk.CTkFrame(main_card, fg_color="transparent")
         info_row.pack(fill="x", padx=25, pady=(8, 5))
 
@@ -457,46 +435,29 @@ class StockDescriptorGUI(ctk.CTk):
         )
         self.model_label.pack(side="left", padx=20)
 
-        # === Log header with auto-upload checkbox (NEW) ===
-        log_header_frame = ctk.CTkFrame(main_card, fg_color="transparent")
-        log_header_frame.pack(fill="x", padx=25, pady=(15, 6))
-        log_header_frame.grid_columnconfigure(0, weight=1)
-
         self.log_label = ctk.CTkLabel(
-            log_header_frame, text=self.tr("log_label"),
+            main_card, text=self.tr("log_label"),
             font=ctk.CTkFont(size=14, weight="bold"), anchor="w"
         )
-        self.log_label.grid(row=0, column=0, sticky="w")
-
-        self.auto_upload_var = ctk.BooleanVar(value=self.config.get("auto_upload", False))
-        self.auto_upload_cb = ctk.CTkCheckBox(
-            log_header_frame,
-            text=self.tr("auto_upload"),
-            variable=self.auto_upload_var,
-            font=ctk.CTkFont(size=11),
-            command=self._on_auto_upload_toggle
-        )
-        self.auto_upload_cb.grid(row=0, column=1, sticky="e", padx=(10, 0))
+        self.log_label.pack(fill="x", padx=25, pady=(15, 6))
 
         self.log_text = ctk.CTkTextbox(
-            main_card, height=220, corner_radius=10,
+            main_card, height=200, corner_radius=10,
             fg_color="#1A1A2E", border_color="#334155", border_width=1,
             font=ctk.CTkFont(family="Consolas", size=11), wrap="word"
         )
         self.log_text.pack(fill="both", expand=True, padx=25, pady=(0, 10))
 
-        # === Upload section (row with gear icon inline) ===
+        # Upload section
         upload_section_frame = ctk.CTkFrame(main_card, fg_color="transparent")
         upload_section_frame.pack(fill="x", padx=25, pady=(5, 6))
-        upload_section_frame.grid_columnconfigure(0, weight=1)
 
         self.upload_section_label = ctk.CTkLabel(
             upload_section_frame, text=self.tr("upload_section"),
             font=ctk.CTkFont(size=14, weight="bold"), anchor="w"
         )
-        self.upload_section_label.grid(row=0, column=0, sticky="w")
+        self.upload_section_label.pack(side="left")
 
-        # Gear icon button inline with the header
         self.upload_gear_btn = ctk.CTkButton(
             upload_section_frame, text="⚙️",
             width=32, height=28, corner_radius=6,
@@ -504,9 +465,8 @@ class StockDescriptorGUI(ctk.CTk):
             font=ctk.CTkFont(size=13),
             command=self.open_upload_settings
         )
-        self.upload_gear_btn.grid(row=0, column=1, sticky="e", padx=(8, 0))
+        self.upload_gear_btn.pack(side="right", padx=(5, 0))
 
-        # Upload card
         upload_frame = ctk.CTkFrame(main_card, fg_color="#1E293B", corner_radius=10)
         upload_frame.pack(fill="x", padx=25, pady=(0, 10))
 
@@ -537,7 +497,13 @@ class StockDescriptorGUI(ctk.CTk):
         )
         self.pond5_checkbox.pack(side="left", padx=(0, 20))
 
-        # Progress bars
+        self.auto_upload_var = ctk.BooleanVar(value=False)
+        self.auto_upload_cb = ctk.CTkCheckBox(
+            checkbox_frame, text=self.tr("auto_upload"),
+            variable=self.auto_upload_var, font=ctk.CTkFont(size=11)
+        )
+        self.auto_upload_cb.pack(side="left", padx=(20, 0))
+
         progress_frame = ctk.CTkFrame(upload_frame, fg_color="transparent")
         progress_frame.pack(fill="x", padx=15, pady=(5, 5))
 
@@ -552,7 +518,7 @@ class StockDescriptorGUI(ctk.CTk):
             ctk.CTkLabel(row, text=f"{platform_short[platform]}:", width=30, font=ctk.CTkFont(size=11)).pack(side="left")
             bar = ctk.CTkProgressBar(row, width=300, height=14, corner_radius=4, fg_color="#334155", progress_color=color)
             bar.set(0)
-            bar.pack(side="left", padx=(5, 8), fill="x", expand=True)
+            bar.pack(side="left", padx=(5, 8))
             self.upload_progress[platform] = bar
             pct = ctk.CTkLabel(row, text="0%", width=40, font=ctk.CTkFont(size=11))
             pct.pack(side="left")
@@ -575,27 +541,21 @@ class StockDescriptorGUI(ctk.CTk):
         )
         self.upload_status_label.pack(side="left", padx=15)
 
-        # === Status bar (row 2) ===
+        # Status bar
         status_frame = ctk.CTkFrame(self, height=32, corner_radius=0, fg_color="#0F172A")
-        status_frame.grid(row=2, column=0, sticky="sew")
-        status_frame.grid_columnconfigure(0, weight=1)
+        status_frame.pack(fill="x", side="bottom")
 
         self.status_label = ctk.CTkLabel(
             status_frame, text=self.tr("status_ready"),
             font=ctk.CTkFont(size=12), text_color="#64748B"
         )
-        self.status_label.grid(row=0, column=0, padx=20, pady=6, sticky="w")
+        self.status_label.pack(side="left", padx=20, pady=6)
 
         self.hint_label = ctk.CTkLabel(
             status_frame, text=self.tr("hint"),
             font=ctk.CTkFont(size=10), text_color="#475569"
         )
-        self.hint_label.grid(row=0, column=1, padx=20, pady=6, sticky="e")
-
-    def _on_auto_upload_toggle(self):
-        """Save auto-upload preference to config."""
-        self.config["auto_upload"] = self.auto_upload_var.get()
-        save_config(self.config)
+        self.hint_label.pack(side="right", padx=20)
 
     def _get_current_model(self) -> str:
         if self.config.get("provider") == "gemini":
@@ -772,6 +732,7 @@ class StockDescriptorGUI(ctk.CTk):
             set_status(self.tr("status_error"), ERROR_RED)
         finally:
             q.put(("done",))
+            # Auto-upload if checkbox is checked and pipeline succeeded
             if pipeline_ok and self.auto_upload_var.get():
                 q.put(("auto_upload_start",))
 
@@ -790,6 +751,7 @@ class StockDescriptorGUI(ctk.CTk):
                     self.run_btn.configure(state="normal", text=self.tr("run_btn"))
                     self.update_status(self.tr("status_done"), SUCCESS_GREEN)
                 elif item[0] == "auto_upload_start":
+                    # Trigger auto-upload after pipeline completes
                     self.after(500, self._trigger_auto_upload)
                 elif item[0] == "upload_start":
                     _, platform, total = item
@@ -819,7 +781,9 @@ class StockDescriptorGUI(ctk.CTk):
         self.after(120, self._poll_log_queue)
 
     def _trigger_auto_upload(self):
+        """Called after pipeline completes to auto-start upload."""
         self.log("📤 Auto-upload triggered (checkbox enabled)", "step")
+        # Clear and then trigger the upload
         self.current_folder = Path(self.folder_entry.get().strip())
         selected = [p for p, var in self.upload_platforms.items() if var.get()]
         if not selected:
@@ -907,7 +871,7 @@ class StockDescriptorGUI(ctk.CTk):
 
 
 class UploadSettingsWindow(ctk.CTkToplevel):
-    """Settings dialog for FTP/SFTP upload credentials — scalable, resizable, ESC to close, clamped to screen."""
+    """Settings dialog for FTP/SFTP upload credentials — scalable, resizable, ESC to close."""
 
     def __init__(self, parent: StockDescriptorGUI, current_config: Dict[str, Any], lang: str = "ru"):
         super().__init__(parent)
@@ -917,13 +881,11 @@ class UploadSettingsWindow(ctk.CTkToplevel):
         self._password_visible = {}
 
         self.title(parent.tr("upload_settings_title"))
-        self.geometry("720x580")
-        self.minsize(620, 480)
+        self.geometry("680x560")
         self.resizable(True, True)
         self.transient(parent)
         self.grab_set()
         self.bind("<Escape>", lambda e: self.destroy())
-        self.bind("<Configure>", self._clamp_to_screen)
 
         self._build_ui()
         self.center()
@@ -940,43 +902,19 @@ class UploadSettingsWindow(ctk.CTkToplevel):
         y = self.parent.winfo_y() + (self.parent.winfo_height() // 2) - (self.winfo_height() // 2)
         self.geometry(f"+{x}+{y}")
 
-    def _clamp_to_screen(self, event=None):
-        """Prevent window from moving outside visible screen area (multi-monitor friendly)."""
-        try:
-            self.update_idletasks()
-            x = self.winfo_x()
-            y = self.winfo_y()
-            w = self.winfo_width()
-            h = self.winfo_height()
-            sw = self.winfo_screenwidth()
-            sh = self.winfo_screenheight()
-            new_x = max(0, min(x, sw - w - 20))
-            new_y = max(0, min(y, sh - h - 20))
-            if new_x != x or new_y != y:
-                self.geometry(f"+{new_x}+{new_y}")
-        except Exception:
-            pass
-
-    def _toggle_password_visible(self, platform: str, entry: ctk.CTkEntry, btn: ctk.CTkButton):
+    def _toggle_password_visible(self, platform: str, entry: ctk.CTkEntry):
         """Toggle password visibility for a platform's password field."""
-        is_visible = self._password_visible.get(platform, False)
-        if is_visible:
+        if platform in self._password_visible and self._password_visible[platform]:
             entry.configure(show="•")
-            btn.configure(text="👁")
             self._password_visible[platform] = False
         else:
             entry.configure(show="")
-            btn.configure(text="🙈")
             self._password_visible[platform] = True
 
     def _build_ui(self):
-        # Use grid for full scalability
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(0, weight=1)
-
+        # Scrollable frame for content
         container = ctk.CTkScrollableFrame(self, corner_radius=0, fg_color="transparent")
-        container.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
-        container.grid_columnconfigure(0, weight=1)
+        container.pack(fill="both", expand=True, padx=0, pady=0)
 
         header = ctk.CTkLabel(container, text=self.tr("upload_settings_header"),
                               font=ctk.CTkFont(size=15, weight="bold"))
@@ -988,11 +926,10 @@ class UploadSettingsWindow(ctk.CTkToplevel):
 
         for platform in platforms:
             frame = ctk.CTkFrame(container, fg_color="#1E293B", corner_radius=10)
-            frame.pack(fill="x", padx=20, pady=5, expand=True)
-            frame.grid_columnconfigure(1, weight=1)
+            frame.pack(fill="x", padx=20, pady=5)
 
             ctk.CTkLabel(frame, text=platform_labels[platform],
-                         font=ctk.CTkFont(size=13, weight="bold")).grid(row=0, column=0, columnspan=2, sticky="w", padx=15, pady=(8, 4))
+                         font=ctk.CTkFont(size=13, weight="bold")).pack(anchor="w", padx=15, pady=(8, 4))
 
             plat_cfg = self.upload_config.get(platform, {})
             entries = {}
@@ -1004,33 +941,35 @@ class UploadSettingsWindow(ctk.CTkToplevel):
                 ("upload_path_label", "remote_path", plat_cfg.get("remote_path", "/")),
             ]
 
-            for r, (label_key, field_key, default_val) in enumerate(fields, start=1):
-                ctk.CTkLabel(frame, text=self.tr(label_key), width=120, anchor="w",
-                             font=ctk.CTkFont(size=11)).grid(row=r, column=0, padx=15, pady=4, sticky="w")
+            for label_key, field_key, default_val in fields:
+                row = ctk.CTkFrame(frame, fg_color="transparent")
+                row.pack(fill="x", padx=15, pady=2)
+
+                ctk.CTkLabel(row, text=self.tr(label_key), width=120, anchor="w",
+                             font=ctk.CTkFont(size=11)).pack(side="left")
 
                 if field_key == "password":
-                    pass_frame = ctk.CTkFrame(frame, fg_color="transparent")
-                    pass_frame.grid(row=r, column=1, padx=(5, 15), pady=4, sticky="ew")
-                    pass_frame.grid_columnconfigure(0, weight=1)
+                    # Password row with eye button
+                    pass_frame = ctk.CTkFrame(row, fg_color="transparent")
+                    pass_frame.pack(side="right", padx=(5, 0))
 
-                    entry = ctk.CTkEntry(pass_frame, show="•")
+                    entry = ctk.CTkEntry(pass_frame, width=360, show="•")
                     entry.insert(0, default_val)
-                    entry.grid(row=0, column=0, sticky="ew")
+                    entry.pack(side="left")
                     entries[field_key] = entry
                     self._password_visible[platform] = False
 
                     eye_btn = ctk.CTkButton(
-                        pass_frame, text="👁", width=32, height=28, corner_radius=6,
+                        pass_frame, text="👁", width=30, height=28, corner_radius=6,
                         fg_color="#334155", hover_color="#475569",
                         font=ctk.CTkFont(size=12),
-                        command=lambda p=platform, e=entry, b=None: self._toggle_password_visible(p, e, eye_btn)
+                        command=lambda p=platform, e=entry: self._toggle_password_visible(p, e)
                     )
-                    eye_btn.configure(command=lambda p=platform, e=entry, b=eye_btn: self._toggle_password_visible(p, e, b))
-                    eye_btn.grid(row=0, column=1, padx=(4, 0))
+                    eye_btn.pack(side="left", padx=(4, 0))
                 else:
-                    entry = ctk.CTkEntry(frame)
+                    entry = ctk.CTkEntry(row, width=400)
                     entry.insert(0, default_val)
-                    entry.grid(row=r, column=1, padx=(5, 15), pady=4, sticky="ew")
+                    entry.pack(side="right", padx=(5, 0))
                     entries[field_key] = entry
 
             self.platform_entries[platform] = entries
@@ -1038,22 +977,20 @@ class UploadSettingsWindow(ctk.CTkToplevel):
         # Buttons
         btn_frame = ctk.CTkFrame(container, fg_color="transparent")
         btn_frame.pack(fill="x", pady=15, padx=20)
-        btn_frame.grid_columnconfigure(0, weight=1)
-        btn_frame.grid_columnconfigure(1, weight=1)
 
         save_btn = ctk.CTkButton(
             btn_frame, text=self.tr("save_btn"),
             fg_color=ACCENT_COLOR, hover_color="#3CB371",
             width=200, height=40, command=self.save_and_close
         )
-        save_btn.grid(row=0, column=0, padx=10, sticky="e")
+        save_btn.pack(side="left", padx=10)
 
         cancel_btn = ctk.CTkButton(
             btn_frame, text=self.tr("cancel_btn"),
             fg_color="#475569", hover_color="#64748B",
             width=120, height=40, command=self.destroy
         )
-        cancel_btn.grid(row=0, column=1, padx=10, sticky="w")
+        cancel_btn.pack(side="right", padx=10)
 
     def save_and_close(self):
         new_cfg = {}
@@ -1085,7 +1022,6 @@ class SettingsWindow(ctk.CTkToplevel):
 
         self.title(parent.tr("settings_title"))
         self.geometry("640x600")
-        self.minsize(560, 480)
         self.resizable(True, True)
         self.transient(parent)
         self.grab_set()
@@ -1109,7 +1045,6 @@ class SettingsWindow(ctk.CTkToplevel):
     def _build_settings_ui(self):
         container = ctk.CTkScrollableFrame(self, corner_radius=0, fg_color="transparent")
         container.pack(fill="both", expand=True, padx=0, pady=0)
-        container.grid_columnconfigure(0, weight=1)
 
         header = ctk.CTkLabel(container, text=self.tr("settings_header"),
                               font=ctk.CTkFont(size=15, weight="bold"))
@@ -1166,10 +1101,9 @@ class SettingsWindow(ctk.CTkToplevel):
 
         exiftool_row = ctk.CTkFrame(self.exiftool_frame, fg_color="transparent")
         exiftool_row.pack(fill="x", padx=15, pady=(4, 12))
-        exiftool_row.grid_columnconfigure(0, weight=1)
 
         self.exiftool_entry = ctk.CTkEntry(exiftool_row)
-        self.exiftool_entry.grid(row=0, column=0, padx=(0, 8), sticky="ew")
+        self.exiftool_entry.pack(side="left", padx=(0, 8), fill="x", expand=True)
         self.exiftool_entry.insert(0, self.current_config.get("exiftool_path", "D:\\PROGRAMS\\EXIFTOOL\\exiftool.exe"))
 
         self.exiftool_browse_btn = ctk.CTkButton(
@@ -1177,7 +1111,7 @@ class SettingsWindow(ctk.CTkToplevel):
             width=90, height=32, corner_radius=8,
             fg_color="#475569", hover_color="#64748B", command=self._browse_exiftool
         )
-        self.exiftool_browse_btn.grid(row=0, column=1)
+        self.exiftool_browse_btn.pack(side="right")
 
         # Common params
         common_frame = ctk.CTkFrame(container, fg_color="transparent")
@@ -1208,22 +1142,20 @@ class SettingsWindow(ctk.CTkToplevel):
         # Buttons
         btn_frame = ctk.CTkFrame(container, fg_color="transparent")
         btn_frame.pack(fill="x", pady=15, padx=20)
-        btn_frame.grid_columnconfigure(0, weight=1)
-        btn_frame.grid_columnconfigure(1, weight=1)
 
         save_btn = ctk.CTkButton(
             btn_frame, text=self.tr("save_btn"),
             fg_color=ACCENT_COLOR, hover_color="#3CB371",
             width=200, height=40, command=self.save_and_close
         )
-        save_btn.grid(row=0, column=0, padx=10, sticky="e")
+        save_btn.pack(side="left", padx=10)
 
         cancel_btn = ctk.CTkButton(
             btn_frame, text=self.tr("cancel_btn"),
             fg_color="#475569", hover_color="#64748B",
             width=120, height=40, command=self.destroy
         )
-        cancel_btn.grid(row=0, column=1, padx=10, sticky="w")
+        cancel_btn.pack(side="right", padx=10)
 
         self._on_provider_change(self.provider_var.get())
 

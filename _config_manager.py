@@ -23,7 +23,6 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "last_folder": "",
     "theme": "dark",                           # for future GUI
     "language": "ru",                          # "ru" or "en"
-    "auto_upload": False,                      # NEW: auto-upload after pipeline
     # Upload FTP config (stored in separate upload_config.json)
     "upload_config": {
         "shutterstock": {

@@ -17,37 +17,10 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "lmstudio_model": "qwen3.6-35b-a3b",
     "gemini_api_key": "",
     "gemini_model": "gemini-1.5-flash-latest",
-    "exiftool_path": "D:\\PROGRAMS\\EXIFTOOL\\exiftool.exe",
     "batch_size": 3,
     "delay": 3,
     "last_folder": "",
-    "theme": "dark",                           # for future GUI
-    "language": "ru",                          # "ru" or "en"
-    "auto_upload": False,                      # NEW: auto-upload after pipeline
-    # Upload FTP config (stored in separate upload_config.json)
-    "upload_config": {
-        "shutterstock": {
-            "host": "upload.shutterstock.com",
-            "port": 22,
-            "username": "",
-            "password": "",
-            "remote_path": "/"
-        },
-        "adobe": {
-            "host": "sftp.contributor.adobestock.com",
-            "port": 22,
-            "username": "",
-            "password": "",
-            "remote_path": "/"
-        },
-        "pond5": {
-            "host": "upload.pond5.com",
-            "port": 22,
-            "username": "",
-            "password": "",
-            "remote_path": "/"
-        }
-    }
+    "theme": "dark"                            # for future GUI
 }
 
 
