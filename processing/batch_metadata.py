@@ -421,7 +421,7 @@ def generate_preview_file(image_folder: Path, metadata_file: Path, thumbs_folder
     return preview_file
 
 
-def run_write_exif(image_folder: Path, script_path: Path):
+def run_write_exif(image_folder: Path, script_path: Path, exiftool_path: str = None):
     print(f"Запуск {script_path} для папки {image_folder}")
     cmd = [
         "powershell",
@@ -433,6 +433,8 @@ def run_write_exif(image_folder: Path, script_path: Path):
         "-OriginalFolder",
         str(image_folder)
     ]
+    if exiftool_path:
+        cmd.extend(["-ExifToolPath", exiftool_path])
     try:
         res = subprocess.run(cmd, check=False)
         return res.returncode == 0

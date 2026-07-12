@@ -1,13 +1,16 @@
 param(
     [Parameter(Mandatory=$false)]
-    [string]$OriginalFolder = (Get-Location).Path
+    [string]$OriginalFolder = (Get-Location).Path,
+    [Parameter(Mandatory=$false)]
+    [string]$ExifToolPath = "D:\PROGRAMS\EXIFTOOL\exiftool.exe"
 )
 
 Write-Host "=== ExifTool Writer ===" -ForegroundColor Cyan
 Write-Host "Processing folder: $OriginalFolder" -ForegroundColor Yellow
+Write-Host "ExifTool path: $ExifToolPath" -ForegroundColor Yellow
 
 # Путь к ExifTool
-$exiftool = "D:\PROGRAMS\EXIFTOOL\exiftool.exe"
+$exiftool = $ExifToolPath
 
 # Проверяем наличие ExifTool
 if (-not (Test-Path $exiftool)) {

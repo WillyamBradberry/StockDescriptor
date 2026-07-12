@@ -101,6 +101,8 @@ LANGUAGES = {
         "gemini_frame_title": "Google Gemini Vision",
         "gemini_key_label": "API Key (stored locally):",
         "gemini_model_label": "Model (recommended: gemini-1.5-flash-latest or gemini-2.0-flash):",
+        "exiftool_label": "ExifTool path:",
+        "exiftool_browse": "Browse...",
         "common_params": "Common processing parameters",
         "batch_label": "Batch size (recommended 2-4):",
         "delay_label": "Delay between batches (sec):",
@@ -192,6 +194,8 @@ LANGUAGES = {
         "gemini_frame_title": "Google Gemini Vision",
         "gemini_key_label": "API Key (сохраняется локально):",
         "gemini_model_label": "Модель (рекомендуется gemini-1.5-flash-latest или gemini-2.0-flash):",
+        "exiftool_label": "Путь к ExifTool:",
+        "exiftool_browse": "Обзор...",
         "common_params": "Общие параметры обработки",
         "batch_label": "Размер батча (рекомендуется 2-4):",
         "delay_label": "Задержка между батчами (сек):",
@@ -652,7 +656,8 @@ class StockDescriptorGUI(ctk.CTk):
                     exif_script = ROOT / "processing" / "write_exif.ps1"
 
                 if exif_script.exists():
-                    success = run_write_exif(folder, exif_script)
+                    exiftool_path = self.config.get("exiftool_path", "D:\\PROGRAMS\\EXIFTOOL\\exiftool.exe")
+                    success = run_write_exif(folder, exif_script, exiftool_path)
                     if success:
                         put(self.tr("log_exif_ok"), "success")
                     else:
@@ -718,7 +723,7 @@ class SettingsWindow(ctk.CTkToplevel):
         self.lang = lang
 
         self.title(parent.tr("settings_title"))
-        self.geometry("620x520")
+        self.geometry("620x580")
         self.resizable(False, False)
         self.transient(parent)
         self.grab_set()
@@ -793,6 +798,33 @@ class SettingsWindow(ctk.CTkToplevel):
         self.gemini_model_entry.pack(padx=15, pady=(4, 12))
         self.gemini_model_entry.insert(0, self.current_config.get("gemini_model", "gemini-1.5-flash-latest"))
 
+        # === ExifTool path frame ===
+        self.exiftool_frame = ctk.CTkFrame(self, fg_color="#1E293B", corner_radius=10)
+        self.exiftool_frame.pack(fill="x", padx=20, pady=6)
+
+        ctk.CTkLabel(self.exiftool_frame, text="ExifTool", font=ctk.CTkFont(size=13, weight="bold")).pack(anchor="w", padx=15, pady=(10, 4))
+
+        ctk.CTkLabel(self.exiftool_frame, text=self.tr("exiftool_label")).pack(anchor="w", padx=15)
+
+        exiftool_row = ctk.CTkFrame(self.exiftool_frame, fg_color="transparent")
+        exiftool_row.pack(fill="x", padx=15, pady=(4, 12))
+
+        self.exiftool_entry = ctk.CTkEntry(exiftool_row, width=460)
+        self.exiftool_entry.pack(side="left", padx=(0, 8), fill="x", expand=True)
+        self.exiftool_entry.insert(0, self.current_config.get("exiftool_path", "D:\\PROGRAMS\\EXIFTOOL\\exiftool.exe"))
+
+        self.exiftool_browse_btn = ctk.CTkButton(
+            exiftool_row,
+            text=self.tr("exiftool_browse"),
+            width=90,
+            height=32,
+            corner_radius=8,
+            fg_color="#475569",
+            hover_color="#64748B",
+            command=self._browse_exiftool
+        )
+        self.exiftool_browse_btn.pack(side="right")
+
         # Common params
         common_frame = ctk.CTkFrame(self, fg_color="transparent")
         common_frame.pack(fill="x", padx=20, pady=8)
@@ -852,6 +884,17 @@ class SettingsWindow(ctk.CTkToplevel):
         )
         warn.pack(pady=(5, 10))
 
+    def _browse_exiftool(self):
+        """Open file dialog to select exiftool.exe."""
+        file_path = filedialog.askopenfilename(
+            title=self.tr("exiftool_browse"),
+            filetypes=[("Executable files", "*.exe"), ("All files", "*.*")],
+            initialdir=str(Path(self.exiftool_entry.get()).parent) if self.exiftool_entry.get() else str(Path.home())
+        )
+        if file_path:
+            self.exiftool_entry.delete(0, "end")
+            self.exiftool_entry.insert(0, file_path)
+
     def _on_provider_change(self, value: str):
         if "Gemini" in value or "онлайн" in value:
             self.provider_var.set("gemini")
@@ -869,6 +912,7 @@ class SettingsWindow(ctk.CTkToplevel):
         new_cfg["provider"] = provider
         new_cfg["batch_size"] = int(self.batch_slider.get())
         new_cfg["delay"] = int(self.delay_slider.get())
+        new_cfg["exiftool_path"] = self.exiftool_entry.get().strip() or "D:\\PROGRAMS\\EXIFTOOL\\exiftool.exe"
 
         if provider == "lmstudio":
             new_cfg["lmstudio_url"] = self.lm_url_entry.get().strip()
