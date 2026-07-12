@@ -131,6 +131,16 @@ StockDescriptor/
 
 ## 🛠️ Installation / Update
 
+### 1. Install ExifTool
+
+This project uses **ExifTool** to inject metadata into images.  
+Download and install it from the official site: [https://exiftool.org](https://exiftool.org)
+
+- **Windows:** download `exiftool-12.xx.zip`, extract `exiftool.exe` (rename from `exiftool(-k).exe`) and place it in a permanent folder (e.g. `D:\PROGRAMS\EXIFTOOL\`).
+- Make sure the path matches the one in `processing/write_exif.ps1`, or adjust the script accordingly.
+
+### 2. Install Python dependencies
+
 ```powershell
 cd d:\projects\AI\stock-descriptor
 python -m venv venv
