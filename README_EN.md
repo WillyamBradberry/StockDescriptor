@@ -2,7 +2,7 @@
 
 **Batch describer for Photo Stocks** — a powerful tool for preparing, AI-analyzing, and processing photos for stock platforms with automatic EXIF metadata management and Obsidian navigation.
 
-**NEW v2.1:** Multilingual GUI (English / Русский) with language toggle, console logging, and persistent language setting.
+**NEW v2.2:** Parallel upload to stock platforms (Shutterstock / Adobe Stock / Pond5) via SFTP, plus multilingual GUI (English / Русский) with language toggle, console logging, and persistent settings.
 
 Showcase: https://stock.adobe.com/contributor/202223264/willyam
 
@@ -37,12 +37,41 @@ python gui_launcher.py
 5. **Console logging** — all log messages are also printed to the terminal
 6. **Language toggle** — switch between EN/RU at any time
 7. Auto-save last folder
+8. **«📤 Upload to Stocks» section** — parallel SFTP upload to stock platforms:
+   - Checkboxes for **Shutterstock**, **Adobe Stock**, **Pond5**
+   - Per-platform progress bars with live file counters
+   - **«📤 Upload Selected»** button runs all selected platforms in parallel threads
+   - **«⚙️»** button opens the **Upload FTP Settings** window (host / port / username / password / remote path per platform, with password eye toggle 👁/🙈)
+   - **«Auto-upload to stocks after EXIF injection»** checkbox — triggers upload automatically when the pipeline finishes
+   - Uploaded files are moved to a `_UPLOADED/` subfolder
 
 **GUI Advantages:**
 - No need to remember commands and flags
 - Easy choice between local and cloud AI
-- API keys never go into the repository
+- API keys and FTP credentials never go into the repository
 - Beautiful modern interface (Dark + blue theme)
+
+---
+
+### 📤 Upload to Stock Platforms
+
+StockDescriptor v2.2 can upload your processed JPGs directly to stock contributor accounts over **SFTP** (port 22):
+
+| Platform      | Default SFTP host                          |
+| ------------- | ------------------------------------------ |
+| Shutterstock  | `upload.shutterstock.com`                  |
+| Adobe Stock   | `sftp.contributor.adobestock.com`          |
+| Pond5         | `upload.pond5.com`                         |
+
+How it works:
+1. Open **⚙️ Upload FTP Settings** and enter the host/port/username/password/remote path for each platform you use.
+2. Select the platforms you want with the checkboxes.
+3. Click **«📤 Upload Selected»** — each platform uploads in its own thread with a live progress bar.
+4. (Optional) Enable **«Auto-upload to stocks after EXIF injection»** so uploads start automatically at the end of the pipeline.
+
+Uploaded files are moved into a `_UPLOADED/` folder so they are not re-uploaded on the next run.
+
+> ⚠️ Credentials are stored only in your user profile (see below) and are **never** committed to the repository.
 
 ---
 
@@ -101,31 +130,35 @@ python processing\batch_metadata.py "C:\path\to\images" --provider gemini --mode
 
 ```
 StockDescriptor/
-├── gui_launcher.py          # ← NEW: beautiful GUI app
-├── run_gui.bat              # ← NEW: easy GUI launch
-├── requirements.txt         # + customtkinter
+├── gui_launcher.py          # ← GUI app (v2.2: + stock upload panel)
+├── run_gui.bat              # ← easy GUI launch
+├── requirements.txt         # + customtkinter, paramiko
 ├── README_EN.md             # English documentation
 ├── README_RU.md             # Russian documentation
 ├── processing/
-│   ├── config_manager.py    # ← NEW: config + API key management
-│   ├── batch_metadata.py    # Updated: Gemini support + llm_config
+│   ├── config_manager.py    # config + API key management
+│   ├── batch_metadata.py    # Gemini support + llm_config
 │   ├── resize_for_vision.ps1
 │   ├── write_exif.ps1
 │   ├── create-metadata-nav-modified.ps1
 │   ├── run_pipeline.bat
 │   └── ...
+├── scripts/
+│   └── upload_to_stocks.py  # ← NEW: parallel SFTP upload (Shutterstock/Adobe/Pond5)
 ├── templates/
 └── README.md
 ```
 
 ---
 
-## 🔐 API Key Storage
+## 🔐 API Key & Credential Storage
 
 - On first Gemini key entry in GUI settings, it is saved to:
   `~/.stockdescriptor/config.json`
-- File is created automatically in your home directory
-- **Never commit this file to git** (it's in .gitignore logic)
+- Stock platform FTP/SFTP credentials are saved separately to:
+  `~/.stockdescriptor/upload_config.json`
+- Both files are created automatically in your home directory
+- **Never commit these files to git** (they are excluded from the repository)
 - For security: keep your computer password-protected
 
 ---
