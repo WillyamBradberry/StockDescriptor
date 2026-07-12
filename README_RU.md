@@ -57,9 +57,9 @@ StockDescriptor v2.2 может загружать обработанные JPG 
 
 | Платформа     | SFTP-хост по умолчанию                     |
 | ------------- | ------------------------------------------ |
-| Shutterstock  | `upload.shutterstock.com`                  |
+| Shutterstock  | `ftps.shutterstock.com`                  |
 | Adobe Stock   | `sftp.contributor.adobestock.com`          |
-| Pond5         | `upload.pond5.com`                         |
+| Pond5         | `ftp.pond5.com`                         |
 
 Как это работает:
 1. Откройте **⚙️ Настройки FTP загрузки** и введите хост/порт/имя пользователя/пароль/удалённый путь для нужных платформ.

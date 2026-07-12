@@ -27,8 +27,8 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     # Upload FTP config (stored in separate upload_config.json)
     "upload_config": {
         "shutterstock": {
-            "host": "upload.shutterstock.com",
-            "port": 22,
+            "host": "ftps.shutterstock.com",
+            "port": 21,
             "username": "",
             "password": "",
             "remote_path": "/"
@@ -41,8 +41,8 @@ DEFAULT_CONFIG: Dict[str, Any] = {
             "remote_path": "/"
         },
         "pond5": {
-            "host": "upload.pond5.com",
-            "port": 22,
+            "host": "ftp.pond5.com",
+            "port": 21,
             "username": "",
             "password": "",
             "remote_path": "/"

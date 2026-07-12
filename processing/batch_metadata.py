@@ -230,7 +230,7 @@ def generate_metadata_for_folder(image_folder: Path,
     """
     if llm_config is None:
         try:
-            from _config_manager import load_config
+            from config_manager import load_config
             llm_config = load_config()
         except Exception:
             llm_config = {}
@@ -498,7 +498,7 @@ def main():
 
     # Build llm_config
     try:
-        from _config_manager import load_config
+        from config_manager import load_config
         llm_config = load_config()
     except Exception:
         llm_config = {}

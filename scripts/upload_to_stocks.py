@@ -20,8 +20,8 @@ from stat import S_ISDIR
 # Default FTP config (can be overridden via user config file)
 DEFAULT_UPLOAD_CONFIG = {
     "shutterstock": {
-        "host": "upload.shutterstock.com",
-        "port": 22,
+        "host": "ftps.shutterstock.com",
+        "port": 21,
         "username": "",
         "password": "",
         "remote_path": "/"
@@ -34,8 +34,8 @@ DEFAULT_UPLOAD_CONFIG = {
         "remote_path": "/"
     },
     "pond5": {
-        "host": "upload.pond5.com",
-        "port": 22,
+        "host": "ftp.pond5.com",
+        "port": 21,
         "username": "",
         "password": "",
         "remote_path": "/"

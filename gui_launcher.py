@@ -32,7 +32,7 @@ sys.path.insert(0, str(ROOT / "processing"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 try:
-    from _config_manager import load_config, save_config
+    from config_manager import load_config, save_config
     from batch_metadata import (
         generate_metadata_for_folder,
         generate_preview_file,

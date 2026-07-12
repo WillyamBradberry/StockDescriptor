@@ -59,9 +59,9 @@ StockDescriptor v2.2 can upload your processed JPGs directly to stock contributo
 
 | Platform      | Default SFTP host                          |
 | ------------- | ------------------------------------------ |
-| Shutterstock  | `upload.shutterstock.com`                  |
+| Shutterstock  | `ftps.shutterstock.com`                  |
 | Adobe Stock   | `sftp.contributor.adobestock.com`          |
-| Pond5         | `upload.pond5.com`                         |
+| Pond5         | `ftp.pond5.com`                         |
 
 How it works:
 1. Open **⚙️ Upload FTP Settings** and enter the host/port/username/password/remote path for each platform you use.
