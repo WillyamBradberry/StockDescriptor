@@ -140,6 +140,7 @@ StockDescriptor/
 
 
  ![или укажите путь в настройках](exiftool.jpg)
+ <img src="attachments/exiftool.jpg" alt="ExifTool Installation Example">
 
 ### 2. Установите Python-зависимости
 
