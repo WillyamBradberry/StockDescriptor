@@ -2,6 +2,8 @@
 
 Инструменты для подготовки, AI-анализа и обработки фотографий для стоковых платформ с управлением метаданными EXIF.
 
+Showcase: https://stock.adobe.com/contributor/202223264/willyam
+
 ## 🎯 Основные возможности
 
 ### 1. 🖼️ Масштабирование для Vision API (`processing/resize_for_vision.ps1`)
