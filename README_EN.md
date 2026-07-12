@@ -9,7 +9,8 @@ Showcase: https://stock.adobe.com/contributor/202223264/willyam
 ---
 ## ✨ New Beautiful GUI (recommended)
 
-![README_EN.md](attachments/scr_EN.jpg)
+![StockDescriptor GUI Screenshot](attachments/scr_EN.jpg)
+
 Launch the modern window with one click:
 
 ```batch
@@ -139,7 +140,7 @@ Download and install it from the official site: [https://exiftool.org](https://e
 - **Windows:** download `exiftool-12.xx.zip`, extract `exiftool.exe` (rename from `exiftool(-k).exe`) and place it in a permanent folder (e.g. `D:\PROGRAMS\EXIFTOOL\`).
 - Make sure the path matches the one in `processing/write_exif.ps1`, or adjust the script accordingly.
 
-![README_EN.md](attachments/exiftool.jpg)
+<img src="attachments/exiftool.jpg" alt="ExifTool Installation Example">
 
 ### 2. Install Python dependencies
 
