@@ -16,7 +16,7 @@ What this tool does:
 -  creates descriptions / titles / keywords and then INJECT them into each photo
 -  creates a page METADATA_NAV within the folder with navigation and copy/paste blocks
 -  creates a page METADATA.md with a list of photos (resized thumbnails for quick preview) 
-![[Sleekshot 2026-07-12 11-00-00.jpg]]
+![[./attachments/Sleekshot 2026-07-12 11-00-00.jpg]]
 
 ---
 
