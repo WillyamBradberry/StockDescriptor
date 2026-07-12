@@ -139,7 +139,7 @@ Download and install it from the official site: [https://exiftool.org](https://e
 - **Windows:** download `exiftool-12.xx.zip`, extract `exiftool.exe` (rename from `exiftool(-k).exe`) and place it in a permanent folder (e.g. `D:\PROGRAMS\EXIFTOOL\`).
 - Make sure the path matches the one in `processing/write_exif.ps1`, or adjust the script accordingly.
 
- ![README.md](attachments/exiftool.jpg)
+![README_EN.md](attachments/exiftool.jpg)
 
 ### 2. Install Python dependencies
 
