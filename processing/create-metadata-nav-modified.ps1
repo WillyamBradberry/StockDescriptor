@@ -25,7 +25,7 @@ $content = $originalContent -replace '(?s)^## Навигация.+?^---\s*\n', '
 
 # Вставляем [[## Навигация]] после секции Keywords (закрывающие ``` на ту же строку)
 $nl = "`n"
-$content = $content -replace '(\*\*Keywords:\*\*\s*```\s*\n)([^`\n]+)\n```\s*\n---', ('$1$2'+ $nl + '```' + $nl + '[[## Навигация]]' + $nl + '---')
+$content = $content -replace '(\*\*Keywords:\*\*\s*```\s*\n)([^`\n]+)\n```\s*\n---', ('$1$2'+ $nl + '```' + $nl + $nl + '[[## Навигация]]' + $nl + $nl + '---')
 
 $blocks = [regex]::Split($content, '(?=^## )', [System.Text.RegularExpressions.RegexOptions]::Multiline) `
     | Where-Object { $_ -match '##\s+\S+\.jpg' }
