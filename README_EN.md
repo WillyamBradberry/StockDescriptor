@@ -9,7 +9,7 @@ Showcase: https://stock.adobe.com/contributor/202223264/willyam
 ---
 ## ✨ New Beautiful GUI (recommended)
 
-![[scr_EN.jpg]]
+![README_EN.md](attachments/scr_EN.jpg)
 Launch the modern window with one click:
 
 ```batch
