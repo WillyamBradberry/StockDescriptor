@@ -16,7 +16,7 @@ What this tool does:
 -  creates descriptions / titles / keywords and then INJECT them into each photo
 -  creates a page METADATA_NAV within the folder with navigation and copy/paste blocks
 -  creates a page METADATA.md with a list of photos (resized thumbnails for quick preview) 
-![[scr1.jpg]]
+![[attachments/scr1.jpg]]
 
 ---
 
