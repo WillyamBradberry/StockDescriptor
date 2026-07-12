@@ -138,6 +138,9 @@ StockDescriptor/
 - **Windows:** скачайте `exiftool-12.xx.zip`, извлеките `exiftool.exe` (переименуйте из `exiftool(-k).exe`) и поместите в постоянную папку (например, `D:\PROGRAMS\EXIFTOOL\`).
 - Убедитесь, что путь совпадает с указанным в `processing/write_exif.ps1`, или отредактируйте скрипт под ваш путь.
 
+
+ ![или укажите путь в настройках](exiftool.jpg)
+
 ### 2. Установите Python-зависимости
 
 ```powershell
