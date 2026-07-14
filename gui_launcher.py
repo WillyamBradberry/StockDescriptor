@@ -291,6 +291,10 @@ class StockDescriptorGUI(ctk.CTk):
         self.worker_thread: Optional[threading.Thread] = None
         self.is_running = False
         self.is_uploading = False
+        # Parallel-upload bookkeeping (avoids race where one platform moves a file
+        # another platform still needs — files are moved only after ALL finish)
+        self._uploaded_files: Dict[str, set] = {}
+        self._upload_threads_done: set = set()
 
         self.title(self.tr("window_title"))
         self._setup_geometry()
@@ -805,13 +809,26 @@ class StockDescriptorGUI(ctk.CTk):
                 elif item[0] == "upload_error":
                     _, platform, err = item
                     self.upload_progress_labels[platform].configure(text="❌")
+                elif item[0] == "uploaded_file":
+                    # Track which files succeeded on which platform (for safe move later)
+                    _, platform, filename = item
+                    self._uploaded_files.setdefault(filename, set()).add(platform)
                 elif item[0] == "upload_thread_done":
                     _, platform = item
-                    self.is_running = False
-                    self.is_uploading = False
-                    self.upload_start_btn.configure(state="normal", text=self.tr("upload_start_btn"))
-                    self.upload_status_label.configure(text="")
-                    self.update_status(self.tr("status_ready"))
+                    self._upload_threads_done.add(platform)
+                    # Only move files to _UPLOADED once EVERY selected platform finished,
+                    # and only for files that were uploaded to ALL selected platforms.
+                    selected = [p for p, var in self.upload_platforms.items() if var.get()]
+                    if self._upload_threads_done.issuperset(selected):
+                        self._move_uploaded_files(self.current_folder, selected)
+                        self._uploaded_files.clear()
+                        self._upload_threads_done.clear()
+                        self.is_running = False
+                        self.is_uploading = False
+                        self.upload_start_btn.configure(state="normal", text=self.tr("upload_start_btn"))
+                        self.upload_status_label.configure(text="")
+                        self.update_status(self.tr("status_ready"))
+                        self.log(self.tr("upload_done"), "success")
         except queue.Empty:
             pass
         self.after(120, self._poll_log_queue)
@@ -891,17 +908,50 @@ class StockDescriptorGUI(ctk.CTk):
         q = self.log_queue
         try:
             q.put(("log", self.tr("upload_platform_start", platform.upper()), "step"))
+            # move_uploaded=False: files are NOT moved during parallel upload.
+            # They are moved to _UPLOADED only after ALL platform threads finish
+            # (see _poll_log_queue handling of "upload_thread_done"), which avoids
+            # a race where one platform moves a file another platform still needs.
             if platform == "shutterstock":
-                upload_shutterstock(folder, self.config, progress_queue=q, move_uploaded=True)
+                upload_shutterstock(folder, self.config, progress_queue=q, move_uploaded=False)
             elif platform == "adobe":
-                upload_adobe(folder, self.config, progress_queue=q, move_uploaded=True)
+                upload_adobe(folder, self.config, progress_queue=q, move_uploaded=False)
             elif platform == "pond5":
-                upload_pond5(folder, self.config, progress_queue=q, move_uploaded=True)
+                upload_pond5(folder, self.config, progress_queue=q, move_uploaded=False)
             q.put(("log", self.tr("upload_platform_done", platform.upper()), "success"))
         except Exception as e:
             q.put(("log", self.tr("upload_platform_error", platform.upper(), str(e)), "error"))
         finally:
             q.put(("upload_thread_done", platform))
+
+    def _move_uploaded_files(self, folder: Path, selected_platforms: list):
+        """
+        Move files that were successfully uploaded to ALL selected platforms
+        into the _UPLOADED subfolder. Called only after every platform thread
+        has finished, so no platform can still be reading the source file.
+        """
+        if not self._uploaded_files:
+            return
+        uploaded_folder = folder / "_UPLOADED"
+        moved = 0
+        for filename, platforms in self._uploaded_files.items():
+            # Only move if the file was uploaded to every selected platform
+            if not set(selected_platforms).issubset(platforms):
+                continue
+            src = folder / filename
+            if not src.exists():
+                continue
+            try:
+                uploaded_folder.mkdir(exist_ok=True)
+                dest = uploaded_folder / filename
+                if dest.exists():
+                    dest.unlink()
+                src.rename(dest)
+                moved += 1
+            except Exception as e:
+                self.log(f"⚠️ Could not move {filename}: {e}", "warning")
+        if moved:
+            self.log(f"📦 Moved {moved} file(s) to _UPLOADED", "info")
 
 
 class UploadSettingsWindow(ctk.CTkToplevel):

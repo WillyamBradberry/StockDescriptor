@@ -30,60 +30,137 @@ def image_to_base64(image_path: Path) -> str:
         return base64.b64encode(f.read()).decode('utf-8')
 
 
+def _split_into_sections(text: str) -> List[Tuple[str, str]]:
+    """
+    Split response text into sections by '## filename' headers.
+    Returns list of (filename, section_text) tuples.
+    """
+    sections = []
+    # Match ## filename.jpg (or .png, .jpeg, .webp) at start of line
+    pattern = re.compile(r'^##\s+(.+?\.(?:jpg|png|jpeg|webp))\s*$', re.M | re.I)
+    matches = list(pattern.finditer(text))
+
+    if not matches:
+        return sections
+
+    for i, m in enumerate(matches):
+        fname = m.group(1).strip()
+        start = m.start()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        section_text = text[start:end].strip()
+        sections.append((fname, section_text))
+
+    return sections
+
+
+def _extract_field(block: str, field_name: str) -> Optional[str]:
+    """
+    Extract a single field (**Title:**, **Description:**, **Keywords:**) from a text block.
+    Tries multiple regex patterns with increasing fallback leniency.
+    Returns the cleaned value or None.
+    """
+    escaped = re.escape(field_name)
+
+    # Pattern 1: **Field:** optional whitespace, then optional newline(s), then ```, then value, then ```
+    pat1 = rf'\*\*{escaped}:\*\*\s*\n*`{{3,}}\s*\n?(.*?)\n?`{{3,}}'
+    m = re.search(pat1, block, re.S | re.I)
+    if m:
+        value = m.group(1).strip()
+        if value:
+            return value
+
+    # Pattern 2: **Field:** ```value``` (backticks on same line)
+    pat2 = rf'\*\*{escaped}:\*\*\s*`{{3,}}\s*(.*?)\s*`{{3,}}'
+    m = re.search(pat2, block, re.S | re.I)
+    if m:
+        value = m.group(1).strip()
+        if value:
+            return value
+
+    # Pattern 3: **Field:** then everything up to next ** or --- or end of text
+    pat3 = rf'\*\*{escaped}:\*\*\s*(.*?)(?=\n\*\*|\n---|\Z)'
+    m = re.search(pat3, block, re.S | re.I)
+    if m:
+        value = m.group(1).strip()
+        if value:
+            return value
+
+    # Pattern 4: **Field:** then everything up to next ## or end
+    pat4 = rf'\*\*{escaped}:\*\*\s*(.*?)(?=\n##|\Z)'
+    m = re.search(pat4, block, re.S | re.I)
+    if m:
+        value = m.group(1).strip()
+        if value:
+            return value
+
+    return None
+
+
 def extract_metadata_block(text: str, filename: str) -> Optional[str]:
     """
     Try to extract Title, Description, Keywords for a specific filename from LLM response text.
     Returns a formatted markdown block string or None if extraction failed.
     """
-    sections_by_filename: Dict[str, str] = {}
+    text_lower = text.lower()
+    filename_lower = filename.lower()
 
-    # Strategy A: split on ## filename.jpg headings
-    heading_matches = list(re.finditer(r'##\s+(.+?\.jpg)\s*(.*?)(?=\n##\s+|\Z)', text, re.S | re.I))
-    if heading_matches:
-        for m in heading_matches:
-            fname = m.group(1).strip().lower()
-            block = m.group(0).strip()
-            sections_by_filename[fname] = block
+    # ---- Step 1: Find the section of text belonging to this filename ----
+    section = None
 
-    # Strategy B: split on --- and try to match filenames
-    if not sections_by_filename:
+    # Strategy A: Split on ## filename.jpg headings
+    sections = _split_into_sections(text)
+    if sections:
+        for sec_filename, sec_text in sections:
+            if sec_filename.lower() == filename_lower:
+                section = sec_text
+                break
+        # Fuzzy fallback: match by filename stem (without extension) or substring
+        if not section:
+            for sec_filename, sec_text in sections:
+                sec_stem = Path(sec_filename).stem.lower()
+                file_stem = Path(filename_lower).stem
+                if sec_stem == file_stem or filename_lower in sec_text[:300].lower():
+                    section = sec_text
+                    break
+
+    # Strategy B: Split on --- and find the right segment
+    if not section:
         dash_sections = re.split(r'\n---+\s*\n', text)
         for s in dash_sections:
-            fname_m = re.search(r'(?:^|\s)(\S+\.jpg)', s[:200], re.I)
-            if fname_m:
-                fname = fname_m.group(1).strip().lower()
-                sections_by_filename[fname] = s.strip()
+            if filename_lower in s[:300].lower():
+                section = s.strip()
+                break
 
-    # Strategy C: split on **Title:** boundaries
-    if not sections_by_filename:
-        title_sections = re.split(r'\*\*Title:\*\*', text)
-        if len(title_sections) > 1:
-            for i, s in enumerate(title_sections):
-                if i == 0:
-                    continue
-                fname_m = re.search(r'(?:^|\s)(\S+\.jpg)', s[:200], re.I)
-                if fname_m:
-                    fname = fname_m.group(1).strip().lower()
-                    sections_by_filename[fname] = "**Title:**\n" + s.strip()
+    # Strategy C: Find first mention of filename, then extract surrounding block
+    if not section:
+        idx = text_lower.find(filename_lower)
+        if idx >= 0:
+            # Take text from this position until next ## or --- or end
+            end_idx = len(text)
+            for sep in ['\n## ', '\n---']:
+                sep_idx = text.find(sep, idx + len(filename))
+                if sep_idx > 0 and sep_idx < end_idx:
+                    end_idx = sep_idx
+            section = text[idx:end_idx].strip()
 
-    # Strategy D: fallback — use whole text
-    block_str = sections_by_filename.get(filename.lower(), text)
+    # Strategy D: Last resort — use whole text (only if filename appears in it)
+    if not section:
+        if filename_lower in text_lower:
+            section = text.strip()
+        else:
+            return None
 
-    # Extract Title, Description, Keywords
-    title_m = re.search(r'\*\*Title:\*\*\s*\n*`{3,}\s*\n?(.*?)\n?`{3,}', block_str, re.S | re.I)
-    desc_m = re.search(r'\*\*Description:\*\*\s*\n*`{3,}\s*\n?(.*?)\n?`{3,}', block_str, re.S | re.I)
-    kw_m = re.search(r'\*\*Keywords:\*\*\s*\n*`{3,}\s*\n?(.*?)\n?`{3,}', block_str, re.S | re.I)
-
-    title = title_m.group(1).strip() if title_m else None
-    desc = desc_m.group(1).strip() if desc_m else None
-    kw = kw_m.group(1).strip() if kw_m else None
+    # ---- Step 2: Extract fields ----
+    title = _extract_field(section, 'Title')
+    desc = _extract_field(section, 'Description')
+    kw = _extract_field(section, 'Keywords')
 
     if title or desc or kw:
         result = f"## {filename}\n\n"
         result += f"![[{filename}|600]]\n\n"
         result += f"**Title:**\n```\n{title or ''}\n```\n\n"
         result += f"**Description:**\n```\n{desc or ''}\n```\n\n"
-        result += f"**Keywords:**\n```\n{kw or ''}\n---"
+        result += f"**Keywords:**\n```\n{kw or ''}\n```\n---"
         return result
 
     return None

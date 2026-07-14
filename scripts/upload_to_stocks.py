@@ -11,6 +11,7 @@ import json
 import time
 import threading
 import paramiko
+import ftplib
 from pathlib import Path
 from typing import Optional, Dict, Any, Callable
 from stat import S_ISDIR
@@ -98,6 +99,57 @@ def upload_file_sftp(
         return False
 
 
+def upload_file_ftp(
+    ftp,
+    local_path: Path,
+    remote_path: str,
+    progress_callback: Optional[Callable[[int, int], None]] = None
+) -> bool:
+    """
+    Upload a single file via FTPS (FTP_TLS) with optional progress callback.
+    progress_callback(current_bytes, total_bytes)
+    """
+    total_size = local_path.stat().st_size
+    uploaded = 0
+
+    def callback(block: bytes):
+        nonlocal uploaded
+        uploaded += len(block)
+        if progress_callback:
+            progress_callback(uploaded, total_size)
+
+    try:
+        with open(local_path, "rb") as f:
+            ftp.storbinary(f"STOR {remote_path}", f, callback=callback)
+        return True
+    except Exception as e:
+        print(f"  Upload error: {e}")
+        return False
+
+
+def ensure_ftp_dir(ftp, remote_path: str):
+    """Recursively ensure remote directory exists on an FTP/FTPS server."""
+    parts = remote_path.strip("/").split("/")
+    current = ""
+    for part in parts:
+        if not part:
+            continue
+        current += "/" + part
+        try:
+            ftp.cwd(current)
+        except Exception:
+            try:
+                ftp.mkd(current)
+                ftp.cwd(current)
+            except Exception:
+                pass
+    # Restore to root so subsequent STOR paths are interpreted from root
+    try:
+        ftp.cwd("/")
+    except Exception:
+        pass
+
+
 # ================= PLATFORM-SPECIFIC UPLOADERS =================
 
 def _get_upload_config(platform: str, config: Dict[str, Any]) -> Dict[str, Any]:
@@ -142,7 +194,7 @@ def upload_to_platform(
     if not host or not username:
         msg = f"⚠️ FTP config for {platform} is incomplete. Set credentials in Settings → Upload."
         if progress_queue:
-            progress_queue.put(("log", platform, msg, "warning"))
+            progress_queue.put(("log", f"[{platform.upper()}] {msg}", "warning"))
         else:
             print(msg)
         return 0
@@ -158,7 +210,7 @@ def upload_to_platform(
     if not jpg_files:
         msg = f"ℹ️ No JPG files found in {folder} for {platform}"
         if progress_queue:
-            progress_queue.put(("log", platform, msg, "info"))
+            progress_queue.put(("log", f"[{platform.upper()}] {msg}", "info"))
         else:
             print(msg)
         return 0
@@ -170,17 +222,57 @@ def upload_to_platform(
     if progress_queue:
         # Signal total file count
         progress_queue.put(("upload_start", platform, total_files))
-        progress_queue.put(("log", platform, f"📤 Starting upload {total_files} files to {platform.upper()}...", "step"))
+        progress_queue.put(("log", f"[{platform.upper()}] 📤 Starting upload {total_files} files...", "step"))
 
-    # Connect via SFTP
+    # Decide protocol: port 22 => SFTP (paramiko), otherwise FTPS (ftplib)
+    use_sftp = (int(port) == 22)
+
+    # ---- Connect ----
+    sftp = None
+    ftp = None
+    transport = None
     try:
-        transport = paramiko.Transport((host, port))
-        transport.connect(username=username, password=password)
-        sftp = paramiko.SFTPClient.from_transport(transport)
+        if use_sftp:
+            transport = paramiko.Transport((host, int(port)))
+            transport.connect(username=username, password=password)
+            sftp = paramiko.SFTPClient.from_transport(transport)
+        else:
+            # Try secure FTPS first with an explicit connection timeout.
+            try:
+                ftp = ftplib.FTP_TLS()
+                ftp.connect(host, int(port), timeout=30)
+                ftp.login(username, password)
+                try:
+                    # Some servers require set_pasv(True) AFTER login and
+                    # BEFORE prot_p(), otherwise they reset the TLS session
+                    # or time out on the data channel.
+                    ftp.set_pasv(True)
+                    ftp.prot_p()  # secure the data channel
+                except Exception as tls_err:
+                    # Server may not support securing the data channel
+                    # (or drops TLS in passive mode). Continue without it
+                    # rather than aborting the whole upload.
+                    print(f"Warning: Could not secure data channel: {tls_err}")
+            except Exception as e:
+                # FTPS failed entirely (timeout, SSL handshake error, socket
+                # error, etc.). Fall back to plain (unencrypted) FTP.
+                print(f"FTPS connection failed, trying plain FTP... Error: {e}")
+                try:
+                    if ftp is not None:
+                        try:
+                            ftp.close()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                ftp = ftplib.FTP()
+                ftp.connect(host, int(port), timeout=30)
+                ftp.login(username, password)
+                ftp.set_pasv(True)
     except Exception as e:
         msg = f"❌ Connection failed for {platform}: {e}"
         if progress_queue:
-            progress_queue.put(("log", platform, msg, "error"))
+            progress_queue.put(("log", f"[{platform.upper()}] {msg}", "error"))
             progress_queue.put(("upload_error", platform, str(e)))
         else:
             print(msg)
@@ -189,7 +281,10 @@ def upload_to_platform(
     try:
         # Ensure remote root dir exists
         try:
-            ensure_remote_dir(sftp, remote_root)
+            if use_sftp:
+                ensure_remote_dir(sftp, remote_root)
+            else:
+                ensure_ftp_dir(ftp, remote_root)
         except Exception:
             pass  # root may already exist
 
@@ -202,20 +297,29 @@ def upload_to_platform(
                 progress_queue.put(("progress", platform, idx + 1, total_files, filename))
 
             try:
-                success = upload_file_sftp(sftp, local_file, remote_file)
+                if use_sftp:
+                    success = upload_file_sftp(sftp, local_file, remote_file)
+                else:
+                    success = upload_file_ftp(ftp, local_file, remote_file)
             except Exception as e:
                 success = False
                 if progress_queue:
-                    progress_queue.put(("log", platform, f"❌ Error uploading {filename}: {e}", "error"))
+                    progress_queue.put(("log", f"[{platform.upper()}] ❌ Error uploading {filename}: {e}", "error"))
 
             if success:
                 uploaded_count += 1
                 if progress_queue:
-                    progress_queue.put(("log", platform, f"✅ {filename} uploaded successfully", "success"))
+                    progress_queue.put(("log", f"[{platform.upper()}] ✅ {filename} uploaded successfully", "success"))
+                    # Report the successfully uploaded file so the GUI can
+                    # safely move it to _UPLOADED only after ALL platforms finish
+                    # (avoids a race when multiple platforms upload the same folder in parallel)
+                    progress_queue.put(("uploaded_file", platform, filename))
                 else:
                     print(f"  ✅ {filename} uploaded")
 
-                # Move to _UPLOADED if requested
+                # Move to _UPLOADED if requested (used by CLI / single-platform runs).
+                # In parallel GUI runs the caller passes move_uploaded=False and moves
+                # files itself once every platform thread has completed.
                 if move_uploaded:
                     try:
                         uploaded_folder.mkdir(exist_ok=True)
@@ -225,30 +329,40 @@ def upload_to_platform(
                         local_file.rename(dest)
                     except Exception as e:
                         if progress_queue:
-                            progress_queue.put(("log", platform, f"⚠️ Could not move {filename}: {e}", "warning"))
+                            progress_queue.put(("log", f"[{platform.upper()}] ⚠️ Could not move {filename}: {e}", "warning"))
             else:
                 if progress_queue:
-                    progress_queue.put(("log", platform, f"❌ Failed to upload {filename}", "error"))
+                    progress_queue.put(("log", f"[{platform.upper()}] ❌ Failed to upload {filename}", "error"))
 
         # Summary
         if progress_queue:
             progress_queue.put(("upload_done", platform, uploaded_count, total_files))
             if uploaded_count == total_files:
-                progress_queue.put(("log", platform, f"✅ {platform.upper()}: All {uploaded_count}/{total_files} files uploaded!", "success"))
+                progress_queue.put(("log", f"[{platform.upper()}] ✅ All {uploaded_count}/{total_files} files uploaded!", "success"))
             else:
-                progress_queue.put(("log", platform, f"⚠️ {platform.upper()}: {uploaded_count}/{total_files} files uploaded (some failed)", "warning"))
+                progress_queue.put(("log", f"[{platform.upper()}] ⚠️ {uploaded_count}/{total_files} files uploaded (some failed)", "warning"))
 
     except Exception as e:
         msg = f"❌ {platform} upload error: {e}"
         if progress_queue:
-            progress_queue.put(("log", platform, msg, "error"))
+            progress_queue.put(("log", f"[{platform.upper()}] {msg}", "error"))
             progress_queue.put(("upload_error", platform, str(e)))
         else:
             print(msg)
     finally:
         try:
-            sftp.close()
-            transport.close()
+            if sftp is not None:
+                sftp.close()
+        except Exception:
+            pass
+        try:
+            if ftp is not None:
+                ftp.quit()
+        except Exception:
+            pass
+        try:
+            if transport is not None:
+                transport.close()
         except Exception:
             pass
 

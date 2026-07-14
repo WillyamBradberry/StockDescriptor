@@ -64,13 +64,24 @@ foreach ($block in $blocks) {
 
         Write-Host "Processing: $filename" -ForegroundColor Cyan
 
-        # Build ExifTool command
+        # Split keywords into individual items so each becomes a SEPARATE IPTC keyword
+        # (a single comma-joined string would be stored as one giant keyword, which
+        #  stock platforms reject). Support comma, semicolon or newline separators.
+        $keywords = @()
+        if ($kw -ne '') {
+            $keywords = $kw -split '[,;]\s*|\n' | Where-Object { $_.Trim() -ne '' } | ForEach-Object { $_.Trim() }
+        }
+
+        # Build ExifTool command. Keywords are added one-by-one via the
+        # list syntax (-IPTC:Keywords+=value) so ExifTool stores them as
+        # distinct keywords regardless of any separator handling.
         $cmd = "& `"$exiftool`" -overwrite_original " +
                "-IPTC:ObjectName=`"$title`" " +
-               "-IPTC:Caption-Abstract=`"$desc`" " +
-               "-sep `", `" " +
-               "-IPTC:Keywords=`"$kw`" " +
-               "-IPTC:By-line=`"Vitaly Sokol`" " +
+               "-IPTC:Caption-Abstract=`"$desc`" "
+        foreach ($k in $keywords) {
+            $cmd += "-IPTC:Keywords+=`"$k`" "
+        }
+        $cmd += "-IPTC:By-line=`"Vitaly Sokol`" " +
                "-IPTC:By-lineTitle=`"Professional Photographer`" " +
                "-IPTC:CopyrightNotice=`"© Vitaliy-sokol.com`" " +
                "-XMP-dc:Creator=`"Vitaly Sokol`" " +
