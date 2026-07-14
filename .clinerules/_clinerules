@@ -2,8 +2,6 @@
 
 ## General
 
-- Always read .agents/README.md
-- Always read .agents/AGENTS.md
 - Always read specifications before implementation
 - Never modify unrelated files
 - Keep diffs minimal and isolated

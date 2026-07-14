@@ -373,30 +373,33 @@ def upload_shutterstock(
     folder: Path,
     config: Dict[str, Any],
     progress_queue=None,
-    move_uploaded: bool = True
+    move_uploaded: bool = True,
+    file_filter=None
 ) -> int:
     """Upload files to Shutterstock."""
-    return upload_to_platform("shutterstock", folder, config, progress_queue, move_uploaded)
+    return upload_to_platform("shutterstock", folder, config, progress_queue, move_uploaded, file_filter=file_filter)
 
 
 def upload_adobe(
     folder: Path,
     config: Dict[str, Any],
     progress_queue=None,
-    move_uploaded: bool = True
+    move_uploaded: bool = True,
+    file_filter=None
 ) -> int:
     """Upload files to Adobe Stock."""
-    return upload_to_platform("adobe", folder, config, progress_queue, move_uploaded)
+    return upload_to_platform("adobe", folder, config, progress_queue, move_uploaded, file_filter=file_filter)
 
 
 def upload_pond5(
     folder: Path,
     config: Dict[str, Any],
     progress_queue=None,
-    move_uploaded: bool = True
+    move_uploaded: bool = True,
+    file_filter=None
 ) -> int:
     """Upload files to Pond5."""
-    return upload_to_platform("pond5", folder, config, progress_queue, move_uploaded)
+    return upload_to_platform("pond5", folder, config, progress_queue, move_uploaded, file_filter=file_filter)
 
 
 # ================= CLI ENTRY POINT =================

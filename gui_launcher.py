@@ -21,6 +21,9 @@ import threading
 import queue
 import subprocess
 import sys
+import os
+import shutil
+import webbrowser
 from pathlib import Path
 from typing import Optional, Dict, Any
 import json
@@ -37,13 +40,16 @@ try:
         generate_metadata_for_folder,
         generate_preview_file,
         run_write_exif,
-        run_nav_script
+        run_nav_script,
+        load_error_list,
     )
     from upload_to_stocks import (
         upload_shutterstock,
         upload_adobe,
         upload_pond5,
     )
+    from lm_studio_client import LMStudioClient
+    from model_unloader import ModelUnloader
 except ImportError as e:
     print(f"Import error: {e}")
     print("Make sure you run from project root and venv has dependencies (including paramiko).")
@@ -155,6 +161,19 @@ LANGUAGES = {
         "auto_upload": "Auto-upload to stocks after EXIF injection",
         "show_password": "Show password",
         "hide_password": "Hide password",
+        "lm_studio_path_label": "LM Studio path (auto-detect or browse):",
+        "lm_studio_path_browse": "Browse...",
+        "lm_studio_refresh_models": "🔄 Refresh model list",
+        "lm_studio_not_found": "⚠️ LM Studio not found! Please specify the path manually.",
+        "lm_studio_not_available": "❌ LM Studio server is not available. Start LM Studio and try again.",
+        "lm_studio_llm_not_found": "❌ LLM not found. Please check LM Studio connection.",
+        "obsidian_btn": "📖 View in Obsidian",
+        "obsidian_download": "⬇️ Download Obsidian",
+        "obsidian_not_found_warn": "Obsidian not installed.",
+        "upload_has_errors_title": "⚠️ Files with errors",
+        "upload_has_errors_text": "These files have metadata errors and will NOT be uploaded:\n{}",
+        "upload_no_metadata": "⚠️ No metadata found (METADATA.md is empty or missing). Upload cancelled.",
+        "pipeline_ready_obsidian": "✅ Pipeline complete. You can now view in Obsidian.",
         "lang_toggle": "EN",
     },
     "ru": {
@@ -260,6 +279,19 @@ LANGUAGES = {
         "auto_upload": "Автозагрузка на стоки после EXIF",
         "show_password": "Показать пароль",
         "hide_password": "Скрыть пароль",
+        "lm_studio_path_label": "Путь к LM Studio (автопоиск или вручную):",
+        "lm_studio_path_browse": "Обзор...",
+        "lm_studio_refresh_models": "🔄 Обновить список моделей",
+        "lm_studio_not_found": "⚠️ LM Studio не найдена! Укажите путь вручную.",
+        "lm_studio_not_available": "❌ Сервер LM Studio недоступен. Запустите LM Studio и попробуйте снова.",
+        "lm_studio_llm_not_found": "❌ LLM не найдена. Проверьте подключение к LM Studio.",
+        "obsidian_btn": "📖 Просмотреть в Obsidian",
+        "obsidian_download": "⬇️ Загрузить Obsidian",
+        "obsidian_not_found_warn": "Obsidian не установлен.",
+        "upload_has_errors_title": "⚠️ Файлы с ошибками",
+        "upload_has_errors_text": "Эти файлы имеют ошибки метаданных и НЕ будут загружены:\n{}",
+        "upload_no_metadata": "⚠️ Метаданные не найдены (METADATA.md пуст или отсутствует). Загрузка отменена.",
+        "pipeline_ready_obsidian": "✅ Пайплайн завершён. Можно просмотреть в Obsidian.",
         "lang_toggle": "RU",
     }
 }
@@ -275,12 +307,84 @@ CARD_BG = "#25253A"
 SUCCESS_GREEN = "#4ADE80"
 WARNING_ORANGE = "#FBBF24"
 ERROR_RED = "#F87171"
+OBSIDIAN_PURPLE = "#7C3AED"
+
+
+def _find_lm_studio_path() -> Optional[str]:
+    """Auto-detect LM Studio installation path on Windows.
+    
+    Returns path to LM Studio.exe or lms CLI if found, otherwise None.
+    """
+    # First, check standard installation paths for LM Studio.exe
+    candidates = [
+        os.path.expandvars(r"%LOCALAPPDATA%\Programs\LM Studio\LM Studio.exe"),
+        os.path.expandvars(r"%LOCALAPPDATA%\Programs\LM-Studio\LM Studio.exe"),
+        os.path.expandvars(r"%LOCALAPPDATA%\LM-Studio\LM Studio.exe"),
+        os.path.expandvars(r"%PROGRAMFILES%\LM Studio\LM Studio.exe"),
+        os.path.expandvars(r"%PROGRAMFILES(X86)%\LM Studio\LM Studio.exe"),
+    ]
+    for path in candidates:
+        if os.path.isfile(path):
+            return path
+    
+    # If LM Studio.exe not found, check if lms CLI is available
+    # The lms CLI is sufficient for model operations (load, unload, ps)
+    lms_cli = shutil.which("lms")
+    if lms_cli:
+        return lms_cli
+    
+    return None
+
+
+def _is_obsidian_installed() -> bool:
+    """Check if Obsidian is installed via Windows registry."""
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, r"obsidian\shell\open\command") as key:
+            value, _ = winreg.QueryValueEx(key, "")
+            return bool(value and "obsidian" in value.lower())
+    except (FileNotFoundError, OSError, ImportError):
+        pass
+    # Fallback: check local app data
+    obsidian_path = os.path.expandvars(r"%LOCALAPPDATA%\Obsidian\Obsidian.exe")
+    if os.path.isfile(obsidian_path):
+        return True
+    return False
+
+
+def _open_in_obsidian(md_file: Path) -> bool:
+    """Open a .md file in Obsidian using the obsidian:// URI scheme."""
+    try:
+        # Try obsidian:// URI with absolute path
+        abs_path = str(md_file.resolve())
+        # Encode path for URI
+        from urllib.parse import quote
+        encoded_path = quote(abs_path)
+        uri = f"obsidian://open?path={encoded_path}"
+        subprocess.run(["cmd", "/c", "start", uri], shell=True, timeout=5)
+        return True
+    except Exception as e:
+        print(f"Failed to open Obsidian: {e}")
+        # Fallback: try os.startfile
+        try:
+            os.startfile(str(md_file))
+            return True
+        except Exception:
+            return False
 
 
 class StockDescriptorGUI(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.config: Dict[str, Any] = load_config()
+        
+        # Auto-detect LM Studio path if not configured
+        if not self.config.get("lm_studio_path"):
+            detected_path = _find_lm_studio_path()
+            if detected_path:
+                self.config["lm_studio_path"] = detected_path
+                save_config(self.config)
+        
         self.current_folder: Optional[Path] = None
         if self.config.get("last_folder"):
             self.current_folder = Path(self.config["last_folder"])
@@ -291,6 +395,7 @@ class StockDescriptorGUI(ctk.CTk):
         self.worker_thread: Optional[threading.Thread] = None
         self.is_running = False
         self.is_uploading = False
+        self._last_nav_file: Optional[Path] = None
         # Parallel-upload bookkeeping (avoids race where one platform moves a file
         # another platform still needs — files are moved only after ALL finish)
         self._uploaded_files: Dict[str, set] = {}
@@ -308,6 +413,7 @@ class StockDescriptorGUI(ctk.CTk):
         self._build_ui()
         self._load_last_folder()
         self._poll_log_queue()
+        self._update_obsidian_button()
 
     def tr(self, key: str, *args) -> str:
         val = LANGUAGES.get(self.lang, LANGUAGES["ru"]).get(key, key)
@@ -361,6 +467,7 @@ class StockDescriptorGUI(ctk.CTk):
             self.upload_status_label.configure(text=self.tr("upload_running"))
         else:
             self.upload_status_label.configure(text="")
+        self._update_obsidian_button()
 
     def _build_ui(self):
         # === Header (row 0) ===
@@ -459,7 +566,7 @@ class StockDescriptorGUI(ctk.CTk):
         )
         self.model_label.pack(side="left", padx=20)
 
-        # === Log header with auto-upload checkbox (NEW) ===
+        # === Log header with auto-upload checkbox ===
         log_header_frame = ctk.CTkFrame(main_card, fg_color="transparent")
         log_header_frame.pack(fill="x", padx=25, pady=(15, 6))
         log_header_frame.grid_columnconfigure(0, weight=1)
@@ -486,6 +593,21 @@ class StockDescriptorGUI(ctk.CTk):
             font=ctk.CTkFont(family="Consolas", size=11), wrap="word"
         )
         self.log_text.pack(fill="both", expand=True, padx=25, pady=(0, 10))
+
+        # === Obsidian button ===
+        obsidian_frame = ctk.CTkFrame(main_card, fg_color="transparent")
+        obsidian_frame.pack(fill="x", padx=25, pady=(5, 5))
+
+        self.obsidian_btn = ctk.CTkButton(
+            obsidian_frame,
+            text=self.tr("obsidian_btn"),
+            height=36, corner_radius=8,
+            fg_color=OBSIDIAN_PURPLE, hover_color="#6D28D9",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            state="disabled",
+            command=self._open_obsidian
+        )
+        self.obsidian_btn.pack(fill="x")
 
         # === Upload section (row with gear icon inline) ===
         upload_section_frame = ctk.CTkFrame(main_card, fg_color="transparent")
@@ -594,6 +716,43 @@ class StockDescriptorGUI(ctk.CTk):
         )
         self.hint_label.grid(row=0, column=1, padx=20, pady=6, sticky="e")
 
+    def _update_obsidian_button(self):
+        """Update Obsidian button state and text based on last nav file."""
+        if self._last_nav_file and self._last_nav_file.exists():
+            if _is_obsidian_installed():
+                self.obsidian_btn.configure(
+                    text=self.tr("obsidian_btn"),
+                    state="normal",
+                    fg_color=OBSIDIAN_PURPLE
+                )
+            else:
+                self.obsidian_btn.configure(
+                    text=self.tr("obsidian_download"),
+                    state="normal",
+                    fg_color="#475569"
+                )
+        else:
+            self.obsidian_btn.configure(
+                text=self.tr("obsidian_btn"),
+                state="disabled",
+                fg_color="#334155"
+            )
+
+    def _open_obsidian(self):
+        """Open the last generated nav file in Obsidian, or download if not installed."""
+        if not self._last_nav_file or not self._last_nav_file.exists():
+            return
+        if _is_obsidian_installed():
+            success = _open_in_obsidian(self._last_nav_file)
+            if not success:
+                # Fallback: try to open with default .md handler
+                try:
+                    os.startfile(str(self._last_nav_file))
+                except Exception as e:
+                    self.log(f"⚠️ Could not open Obsidian: {e}", "error")
+        else:
+            webbrowser.open("https://obsidian.md")
+
     def _on_auto_upload_toggle(self):
         """Save auto-upload preference to config."""
         self.config["auto_upload"] = self.auto_upload_var.get()
@@ -637,6 +796,7 @@ class StockDescriptorGUI(ctk.CTk):
             self.config["last_folder"] = folder
             save_config(self.config)
             self.log(self.tr("log_folder_selected", folder), "success")
+            self._update_obsidian_button()
 
     def open_settings_window(self):
         SettingsWindow(self, self.config, self.on_settings_saved, self.lang)
@@ -646,6 +806,111 @@ class StockDescriptorGUI(ctk.CTk):
         self.provider_label.configure(text=self.tr("provider_label", self.config.get("provider", "lmstudio").upper()))
         self.model_label.configure(text=self.tr("model_label", self._get_current_model()))
         self.log(self.tr("log_settings_saved"), "success")
+
+    # ── Pre-flight checks ────────────────────────────────────────
+
+    def _check_llm_available(self) -> bool:
+        """Check if the selected LLM provider is available. Returns True if OK."""
+        provider = self.config.get("provider", "lmstudio")
+        if provider == "gemini":
+            api_key = self.config.get("gemini_api_key", "") or ""
+            if not api_key:
+                messagebox.showerror(
+                    self.tr("msg_no_key_title"),
+                    "Gemini API key not configured. Open Settings and set it up."
+                )
+                return False
+            return True
+        else:
+            # LM Studio path
+            lm_path = self.config.get("lm_studio_path", "")
+            lm_url = self.config.get("lmstudio_url", "http://localhost:1234/v1/chat/completions")
+            # Normalize URL to base
+            base_url = lm_url.rstrip("/v1/chat/completions").rstrip("/v1").rstrip("/")
+            if not base_url:
+                base_url = "http://127.0.0.1:1234"
+            client = LMStudioClient(
+                base_url=base_url,
+                launch_path=lm_path if lm_path else None,
+            )
+
+            # Try to ensure LM Studio is available
+            self.log("🔍 Checking LM Studio availability...", "info")
+            if not client.ensure_available(timeout=60):
+                msg = self.tr("lm_studio_not_available")
+                messagebox.showerror(self.tr("msg_no_key_title"), msg)
+                return False
+
+            self.log("✅ LM Studio is available.", "success")
+            return True
+
+    def _ensure_correct_model_loaded(self) -> bool:
+        """Check if correct model is loaded in LM Studio; swap if needed."""
+        provider = self.config.get("provider", "lmstudio")
+        if provider != "lmstudio":
+            return True  # No model swap needed for Gemini
+
+        desired_model = self.config.get("lmstudio_model", "qwen3.6-35b-a3b")
+        if not desired_model:
+            return True
+
+        lm_url = self.config.get("lmstudio_url", "http://localhost:1234/v1/chat/completions")
+        base_url = lm_url.rstrip("/v1/chat/completions").rstrip("/v1").rstrip("/")
+        if not base_url:
+            base_url = "http://127.0.0.1:1234"
+
+        lm_path = self.config.get("lm_studio_path", "")
+        client = LMStudioClient(
+            base_url=base_url,
+            launch_path=lm_path if lm_path else None,
+        )
+
+        self.log(f"🔍 Checking loaded model in LM Studio...", "info")
+
+        # Check via lms ps
+        loaded_models = client.get_loaded_models_cli(timeout=5)
+        if not loaded_models:
+            # Try /v1/models API
+            available = client.get_available_models(timeout=5)
+            if available:
+                loaded_models = available
+
+        if loaded_models:
+            self.log(f"  Loaded models: {loaded_models}", "info")
+            # Check if desired model is already loaded
+            already_loaded = False
+            for model in loaded_models:
+                if desired_model.lower() in model.lower() or model.lower() in desired_model.lower():
+                    already_loaded = True
+                    break
+            if already_loaded:
+                self.log(f"✅ Model '{desired_model}' already loaded.", "success")
+                return True
+
+            # Different model loaded — unload all first
+            self.log(f"🔄 Different model loaded. Unloading...", "warning")
+            try:
+                unloader = ModelUnloader(client)
+                result = unloader.free_vram(timeout=10, verbose=True)
+                if result.get("success") or result.get("nothing_to_unload"):
+                    self.log(f"  VRAM freed successfully.", "info")
+                else:
+                    self.log(f"  Warning: VRAM unload may not have completed.", "warning")
+            except Exception as e:
+                self.log(f"  Error during unload: {e}", "warning")
+
+        # Load desired model
+        self.log(f"🔄 Loading model '{desired_model}'...", "info")
+        success = client.load_model(desired_model, timeout=120)
+        if success:
+            self.log(f"✅ Model '{desired_model}' loaded successfully.", "success")
+            return True
+        else:
+            self.log(f"❌ Failed to load model '{desired_model}'.", "error")
+            messagebox.showerror("Model Error", f"Failed to load model '{desired_model}'. Check LM Studio.")
+            return False
+
+    # ── Pipeline ────────────────────────────────────────────────
 
     def start_pipeline(self):
         if self.is_running:
@@ -662,10 +927,12 @@ class StockDescriptorGUI(ctk.CTk):
             messagebox.showerror(self.tr("msg_folder_not_found"), self.tr("msg_folder_not_found_text", str(folder)))
             return
 
-        if self.config.get("provider") == "gemini" and not self.config.get("gemini_api_key"):
-            if not messagebox.askyesno(self.tr("msg_no_key_title"), self.tr("msg_no_key_text")):
-                return
-            self.open_settings_window()
+        # ── Pre-flight check: LLM availability ──
+        if not self._check_llm_available():
+            return
+
+        # ── Pre-flight check: correct model loaded ──
+        if not self._ensure_correct_model_loaded():
             return
 
         self.is_running = True
@@ -763,11 +1030,18 @@ class StockDescriptorGUI(ctk.CTk):
                 put(self.tr("log_nav_ok"), "success")
 
             put(self.tr("pipeline_done"), "success")
-            set_status(self.tr("status_done"), SUCCESS_GREEN)
+            set_status(self.tr("pipeline_ready_obsidian"), SUCCESS_GREEN)
             pipeline_ok = True
 
             self.config["last_folder"] = str(folder)
             save_config(self.config)
+
+            # Set the nav file for Obsidian button
+            nav_candidate = folder / "METADATA-NAV.md"
+            if nav_candidate.exists():
+                self._last_nav_file = nav_candidate
+            elif metadata_file and metadata_file.exists():
+                self._last_nav_file = metadata_file
 
         except Exception as e:
             put(self.tr("log_critical", str(e)), "error")
@@ -776,6 +1050,8 @@ class StockDescriptorGUI(ctk.CTk):
             q.put(("done",))
             if pipeline_ok and self.auto_upload_var.get():
                 q.put(("auto_upload_start",))
+            # Update Obsidian button state after pipeline completion
+            q.put(("update_obsidian",))
 
     def _poll_log_queue(self):
         try:
@@ -810,14 +1086,11 @@ class StockDescriptorGUI(ctk.CTk):
                     _, platform, err = item
                     self.upload_progress_labels[platform].configure(text="❌")
                 elif item[0] == "uploaded_file":
-                    # Track which files succeeded on which platform (for safe move later)
                     _, platform, filename = item
                     self._uploaded_files.setdefault(filename, set()).add(platform)
                 elif item[0] == "upload_thread_done":
                     _, platform = item
                     self._upload_threads_done.add(platform)
-                    # Only move files to _UPLOADED once EVERY selected platform finished,
-                    # and only for files that were uploaded to ALL selected platforms.
                     selected = [p for p, var in self.upload_platforms.items() if var.get()]
                     if self._upload_threads_done.issuperset(selected):
                         self._move_uploaded_files(self.current_folder, selected)
@@ -829,6 +1102,8 @@ class StockDescriptorGUI(ctk.CTk):
                         self.upload_status_label.configure(text="")
                         self.update_status(self.tr("status_ready"))
                         self.log(self.tr("upload_done"), "success")
+                elif item[0] == "update_obsidian":
+                    self._update_obsidian_button()
         except queue.Empty:
             pass
         self.after(120, self._poll_log_queue)
@@ -836,6 +1111,23 @@ class StockDescriptorGUI(ctk.CTk):
     def _trigger_auto_upload(self):
         self.log("📤 Auto-upload triggered (checkbox enabled)", "step")
         self.current_folder = Path(self.folder_entry.get().strip())
+
+        # ── Check for error files before auto-upload ──
+        folder = self.current_folder
+        metadata_error = folder / "metadata_error.md"
+        metadata_file = folder / "METADATA.md"
+        error_files = set()
+        if metadata_error.exists():
+            error_files = load_error_list(metadata_error)
+        if error_files:
+            error_list = "\n".join(sorted(error_files))
+            self.log(f"⚠️ Skipping auto-upload: {len(error_files)} files have metadata errors.", "warning")
+            self.log(f"  Error files: {error_list}", "warning")
+            return
+        if not metadata_file.exists() or metadata_file.stat().st_size == 0:
+            self.log(self.tr("upload_no_metadata"), "error")
+            return
+
         selected = [p for p, var in self.upload_platforms.items() if var.get()]
         if not selected:
             self.log("⚠️ No platforms selected for auto-upload", "warning")
@@ -862,6 +1154,24 @@ class StockDescriptorGUI(ctk.CTk):
     def open_upload_settings(self):
         UploadSettingsWindow(self, self.config, self.lang)
 
+    def _filter_error_files(self, folder: Path, jpg_files: list) -> list:
+        """Filter out files that have metadata errors from the upload list."""
+        metadata_error = folder / "metadata_error.md"
+        if not metadata_error.exists():
+            return jpg_files
+        error_files = load_error_list(metadata_error)
+        if not error_files:
+            return jpg_files
+
+        # Show warning dialog
+        error_list = "\n".join(sorted(error_files))
+        warning_text = self.tr("upload_has_errors_text", error_list)
+        messagebox.showwarning(self.tr("upload_has_errors_title"), warning_text)
+
+        # Filter: only return files NOT in error list
+        filtered = [f for f in jpg_files if f.name.lower() not in error_files]
+        return filtered
+
     def start_parallel_upload(self):
         if self.is_running:
             messagebox.showwarning(self.tr("msg_running"), self.tr("msg_running_text"))
@@ -882,6 +1192,26 @@ class StockDescriptorGUI(ctk.CTk):
             save_config(self.config)
         else:
             self.current_folder = Path(folder_str)
+
+        # ── Check for metadata before upload ──
+        metadata_file = self.current_folder / "METADATA.md"
+        if not metadata_file.exists() or metadata_file.stat().st_size == 0:
+            messagebox.showwarning(
+                self.tr("upload_has_errors_title"),
+                self.tr("upload_no_metadata")
+            )
+            return
+
+        # ── Check for error files ──
+        metadata_error = self.current_folder / "metadata_error.md"
+        error_files = set()
+        if metadata_error.exists():
+            error_files = load_error_list(metadata_error)
+        if error_files:
+            error_list = "\n".join(sorted(error_files))
+            warning_text = self.tr("upload_has_errors_text", error_list)
+            if not messagebox.askyesno(self.tr("upload_has_errors_title"), warning_text + "\n\nContinue loading only files WITHOUT errors?"):
+                return
 
         selected = [p for p, var in self.upload_platforms.items() if var.get()]
         if not selected:
@@ -908,16 +1238,28 @@ class StockDescriptorGUI(ctk.CTk):
         q = self.log_queue
         try:
             q.put(("log", self.tr("upload_platform_start", platform.upper()), "step"))
-            # move_uploaded=False: files are NOT moved during parallel upload.
-            # They are moved to _UPLOADED only after ALL platform threads finish
-            # (see _poll_log_queue handling of "upload_thread_done"), which avoids
-            # a race where one platform moves a file another platform still needs.
+            # Apply error file filter
+            org_upload_fn = None
             if platform == "shutterstock":
-                upload_shutterstock(folder, self.config, progress_queue=q, move_uploaded=False)
+                org_upload_fn = upload_shutterstock
             elif platform == "adobe":
-                upload_adobe(folder, self.config, progress_queue=q, move_uploaded=False)
+                org_upload_fn = upload_adobe
             elif platform == "pond5":
-                upload_pond5(folder, self.config, progress_queue=q, move_uploaded=False)
+                org_upload_fn = upload_pond5
+
+            if org_upload_fn:
+                # Pass file_filter to skip error files
+                metadata_error = folder / "metadata_error.md"
+                if metadata_error.exists():
+                    error_files = load_error_list(metadata_error)
+                    def make_filter(err_set):
+                        def file_filter(f: Path) -> bool:
+                            return f.name.lower() not in err_set
+                        return file_filter
+                    ffilter = make_filter(error_files)
+                    org_upload_fn(folder, self.config, progress_queue=q, move_uploaded=False, file_filter=ffilter)
+                else:
+                    org_upload_fn(folder, self.config, progress_queue=q, move_uploaded=False)
             q.put(("log", self.tr("upload_platform_done", platform.upper()), "success"))
         except Exception as e:
             q.put(("log", self.tr("upload_platform_error", platform.upper(), str(e)), "error"))
@@ -925,17 +1267,12 @@ class StockDescriptorGUI(ctk.CTk):
             q.put(("upload_thread_done", platform))
 
     def _move_uploaded_files(self, folder: Path, selected_platforms: list):
-        """
-        Move files that were successfully uploaded to ALL selected platforms
-        into the _UPLOADED subfolder. Called only after every platform thread
-        has finished, so no platform can still be reading the source file.
-        """
+        """Move files that were successfully uploaded to ALL selected platforms into _UPLOADED."""
         if not self._uploaded_files:
             return
         uploaded_folder = folder / "_UPLOADED"
         moved = 0
         for filename, platforms in self._uploaded_files.items():
-            # Only move if the file was uploaded to every selected platform
             if not set(selected_platforms).issubset(platforms):
                 continue
             src = folder / filename
@@ -961,7 +1298,6 @@ class UploadSettingsWindow(ctk.CTkToplevel):
         super().__init__(parent)
         self.parent = parent
         self.lang = lang
-        # Load upload config from main config (already decrypted by config_manager)
         self.upload_config = current_config.get("upload_config", {})
         self._password_visible = {}
 
@@ -990,7 +1326,6 @@ class UploadSettingsWindow(ctk.CTkToplevel):
         self.geometry(f"+{x}+{y}")
 
     def _clamp_to_screen(self, event=None):
-        """Prevent window from moving outside visible screen area (multi-monitor friendly)."""
         try:
             self.update_idletasks()
             x = self.winfo_x()
@@ -1007,7 +1342,6 @@ class UploadSettingsWindow(ctk.CTkToplevel):
             pass
 
     def _toggle_password_visible(self, platform: str, entry: ctk.CTkEntry, btn: ctk.CTkButton):
-        """Toggle password visibility for a platform's password field."""
         is_visible = self._password_visible.get(platform, False)
         if is_visible:
             entry.configure(show="•")
@@ -1019,7 +1353,6 @@ class UploadSettingsWindow(ctk.CTkToplevel):
             self._password_visible[platform] = True
 
     def _build_ui(self):
-        # Use grid for full scalability
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
 
@@ -1084,7 +1417,6 @@ class UploadSettingsWindow(ctk.CTkToplevel):
 
             self.platform_entries[platform] = entries
 
-        # Buttons
         btn_frame = ctk.CTkFrame(container, fg_color="transparent")
         btn_frame.pack(fill="x", pady=15, padx=20)
         btn_frame.grid_columnconfigure(0, weight=1)
@@ -1115,7 +1447,6 @@ class UploadSettingsWindow(ctk.CTkToplevel):
                 "remote_path": entries["remote_path"].get().strip() or "/",
             }
 
-        # Save into main config (passwords will be encrypted by config_manager)
         self.parent.config["upload_config"] = new_upload_cfg
         if save_config(self.parent.config):
             messagebox.showinfo(self.tr("msg_save_ok_title"), self.tr("upload_save_ok"))
@@ -1135,8 +1466,8 @@ class SettingsWindow(ctk.CTkToplevel):
         self.lang = lang
 
         self.title(parent.tr("settings_title"))
-        self.geometry("640x600")
-        self.minsize(560, 480)
+        self.geometry("640x700")
+        self.minsize(560, 500)
         self.resizable(True, True)
         self.transient(parent)
         self.grab_set()
@@ -1166,6 +1497,7 @@ class SettingsWindow(ctk.CTkToplevel):
                               font=ctk.CTkFont(size=15, weight="bold"))
         header.pack(pady=(15, 10))
 
+        # ── Provider selector ──
         provider_frame = ctk.CTkFrame(container, fg_color=CARD_BG, corner_radius=12)
         provider_frame.pack(fill="x", padx=20, pady=8)
 
@@ -1179,20 +1511,64 @@ class SettingsWindow(ctk.CTkToplevel):
         )
         seg.pack(side="right", padx=15, pady=10)
 
+        # ── LM Studio section ──
         self.lm_frame = ctk.CTkFrame(container, fg_color="#1E293B", corner_radius=10)
         self.lm_frame.pack(fill="x", padx=20, pady=6)
 
         ctk.CTkLabel(self.lm_frame, text=self.tr("lm_frame_title"), font=ctk.CTkFont(size=13, weight="bold")).pack(anchor="w", padx=15, pady=(10, 4))
+
         ctk.CTkLabel(self.lm_frame, text=self.tr("lm_url_label")).pack(anchor="w", padx=15)
         self.lm_url_entry = ctk.CTkEntry(self.lm_frame)
         self.lm_url_entry.pack(padx=15, pady=4, fill="x")
         self.lm_url_entry.insert(0, self.current_config.get("lmstudio_url", "http://localhost:1234/v1/chat/completions"))
 
-        ctk.CTkLabel(self.lm_frame, text=self.tr("lm_model_label")).pack(anchor="w", padx=15)
-        self.lm_model_entry = ctk.CTkEntry(self.lm_frame)
-        self.lm_model_entry.pack(padx=15, pady=(4, 12), fill="x")
-        self.lm_model_entry.insert(0, self.current_config.get("lmstudio_model", "qwen3.6-35b-a3b"))
+        # ── LM Studio path (auto-detect + browse) ──
+        ctk.CTkLabel(self.lm_frame, text=self.tr("lm_studio_path_label")).pack(anchor="w", padx=15, pady=(8, 2))
+        lm_path_row = ctk.CTkFrame(self.lm_frame, fg_color="transparent")
+        lm_path_row.pack(fill="x", padx=15, pady=(2, 8))
+        lm_path_row.grid_columnconfigure(0, weight=1)
 
+        saved_path = self.current_config.get("lm_studio_path", "")
+        if not saved_path:
+            auto_path = _find_lm_studio_path()
+            if auto_path:
+                saved_path = auto_path
+
+        self.lm_path_entry = ctk.CTkEntry(lm_path_row)
+        self.lm_path_entry.grid(row=0, column=0, padx=(0, 6), sticky="ew")
+        self.lm_path_entry.insert(0, saved_path)
+
+        self.lm_path_browse_btn = ctk.CTkButton(
+            lm_path_row, text=self.tr("lm_studio_path_browse"),
+            width=90, height=32, corner_radius=8,
+            fg_color="#475569", hover_color="#64748B",
+            command=self._browse_lm_studio
+        )
+        self.lm_path_browse_btn.grid(row=0, column=1)
+
+        # ── Model selector (dropdown + refresh) ──
+        model_row = ctk.CTkFrame(self.lm_frame, fg_color="transparent")
+        model_row.pack(fill="x", padx=15, pady=(4, 12))
+        model_row.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(model_row, text=self.tr("lm_model_label"), anchor="w").grid(row=0, column=0, sticky="w", pady=(0, 4))
+        self.lm_model_menu = ctk.CTkOptionMenu(
+            model_row,
+            values=[self.current_config.get("lmstudio_model", "qwen3.6-35b-a3b")],
+            dynamic_resizing=True,
+        )
+        self.lm_model_menu.grid(row=1, column=0, sticky="ew", padx=(0, 6))
+
+        self.refresh_models_btn = ctk.CTkButton(
+            model_row, text=self.tr("lm_studio_refresh_models"),
+            width=100, height=32, corner_radius=8,
+            fg_color="#475569", hover_color="#64748B",
+            font=ctk.CTkFont(size=11),
+            command=self._refresh_models
+        )
+        self.refresh_models_btn.grid(row=1, column=1)
+
+        # ── Gemini section ──
         self.gemini_frame = ctk.CTkFrame(container, fg_color="#1E293B", corner_radius=10)
         self.gemini_frame.pack(fill="x", padx=20, pady=6)
 
@@ -1208,7 +1584,7 @@ class SettingsWindow(ctk.CTkToplevel):
         self.gemini_model_entry.pack(padx=15, pady=(4, 12), fill="x")
         self.gemini_model_entry.insert(0, self.current_config.get("gemini_model", "gemini-1.5-flash-latest"))
 
-        # ExifTool path
+        # ── ExifTool path ──
         self.exiftool_frame = ctk.CTkFrame(container, fg_color="#1E293B", corner_radius=10)
         self.exiftool_frame.pack(fill="x", padx=20, pady=6)
 
@@ -1230,7 +1606,7 @@ class SettingsWindow(ctk.CTkToplevel):
         )
         self.exiftool_browse_btn.grid(row=0, column=1)
 
-        # Common params
+        # ── Common params ──
         common_frame = ctk.CTkFrame(container, fg_color="transparent")
         common_frame.pack(fill="x", padx=20, pady=8)
 
@@ -1256,7 +1632,7 @@ class SettingsWindow(ctk.CTkToplevel):
         self.delay_label_val = ctk.CTkLabel(delay_frame, text=str(int(self.delay_slider.get())), width=30)
         self.delay_label_val.pack(side="left")
 
-        # Buttons
+        # ── Buttons ──
         btn_frame = ctk.CTkFrame(container, fg_color="transparent")
         btn_frame.pack(fill="x", pady=15, padx=20)
         btn_frame.grid_columnconfigure(0, weight=1)
@@ -1283,6 +1659,44 @@ class SettingsWindow(ctk.CTkToplevel):
             font=ctk.CTkFont(size=10), text_color="#FCA5A5", justify="center"
         )
         warn.pack(pady=(5, 10))
+
+    def _browse_lm_studio(self):
+        """Browse for LM Studio executable."""
+        file_path = filedialog.askopenfilename(
+            title=self.tr("lm_studio_path_browse"),
+            filetypes=[("Executable files", "*.exe"), ("All files", "*.*")],
+            initialdir=os.path.expandvars(r"%LOCALAPPDATA%\Programs\LM Studio")
+        )
+        if file_path:
+            self.lm_path_entry.delete(0, "end")
+            self.lm_path_entry.insert(0, file_path)
+
+    def _refresh_models(self):
+        """Fetch available models from LM Studio and update dropdown."""
+        lm_url = self.lm_url_entry.get().strip() or "http://localhost:1234/v1/chat/completions"
+        base_url = lm_url.rstrip("/v1/chat/completions").rstrip("/v1").rstrip("/")
+        if not base_url:
+            base_url = "http://127.0.0.1:1234"
+
+        client = LMStudioClient(base_url=base_url)
+        if not client.is_available(timeout=3):
+            messagebox.showwarning(
+                self.tr("msg_no_key_title"),
+                self.tr("lm_studio_not_available")
+            )
+            return
+
+        models = client.get_available_models(timeout=5)
+        if not models:
+            messagebox.showinfo("Info", "No models found in LM Studio.")
+            return
+
+        current_model = self.current_config.get("lmstudio_model", "qwen3.6-35b-a3b")
+        self.lm_model_menu.configure(values=models)
+        if current_model in models:
+            self.lm_model_menu.set(current_model)
+        else:
+            self.lm_model_menu.set(models[0])
 
     def _browse_exiftool(self):
         file_path = filedialog.askopenfilename(
@@ -1314,7 +1728,8 @@ class SettingsWindow(ctk.CTkToplevel):
 
         if provider == "lmstudio":
             new_cfg["lmstudio_url"] = self.lm_url_entry.get().strip()
-            new_cfg["lmstudio_model"] = self.lm_model_entry.get().strip()
+            new_cfg["lmstudio_model"] = self.lm_model_menu.get()
+            new_cfg["lm_studio_path"] = self.lm_path_entry.get().strip()
         else:
             key = self.gemini_key_entry.get().strip()
             new_cfg["gemini_api_key"] = key

@@ -75,18 +75,21 @@ foreach ($block in $blocks) {
         # Build ExifTool command. Keywords are added one-by-one via the
         # list syntax (-IPTC:Keywords+=value) so ExifTool stores them as
         # distinct keywords regardless of any separator handling.
-        $cmd = "& `"$exiftool`" -overwrite_original " +
-               "-IPTC:ObjectName=`"$title`" " +
-               "-IPTC:Caption-Abstract=`"$desc`" "
+        $cmd = "& `"$exiftool`" -overwrite_original -m " +
+            "-IPTC:ObjectName=`"$title`" " +
+            "-XMP-dc:Title=`"$title`" " +
+            "-IPTC:Caption-Abstract=`"$desc`" " +
+            "-XMP-dc:Description=`"$desc`" "
         foreach ($k in $keywords) {
             $cmd += "-IPTC:Keywords+=`"$k`" "
+            $cmd += "-XMP-dc:Subject+=`"$k`" "
         }
         $cmd += "-IPTC:By-line=`"Vitaly Sokol`" " +
-               "-IPTC:By-lineTitle=`"Professional Photographer`" " +
-               "-IPTC:CopyrightNotice=`"© Vitaliy-sokol.com`" " +
-               "-XMP-dc:Creator=`"Vitaly Sokol`" " +
-               "-XMP-dc:Rights=`"© Vitaliy-sokol.com`" " +
-               "`"$fullPath`""
+            "-IPTC:By-lineTitle=`"Professional Photographer`" " +
+            "-IPTC:CopyrightNotice=`"© Vitaliy-sokol.com`" " +
+            "-XMP-dc:Creator=`"Vitalii Sokol`" " +
+            "-XMP-dc:Rights=`"© Vitaliy-sokol.com`" " +
+            "`"$fullPath`""
 
         # Uncomment for debugging: Write-Host $cmd -ForegroundColor DarkGray
 

@@ -1,15 +1,10 @@
-# Memory Bank Rules (Screener Refactoring)
+# Memory Bank Rules 
 
 Before starting ANY implementation, refactoring, debugging, or architectural task, you MUST load and review the Memory Bank.
 
-## Execution Rules
-
-- Do not make changes in the workspace root unless explicitly asked.
-# Project Root
-
-The ONLY project root is:
-
-./
+All code, documentation, memory files,
+reports, tasks and specifications
+must exist inside this directory.
 
 Never create:
 
@@ -18,7 +13,8 @@ Never create:
 ./docs/
 ./reports/
 
-outside project root.
+outside root directory
+
 
 
 ### Active Development Context

@@ -1,9 +1,4 @@
-# AI Film Factory Core Rules
-
-Project Root:
-
-./
-
+# Project
 All code, documentation, memory files,
 reports, tasks and specifications
 must exist inside project root directory.
