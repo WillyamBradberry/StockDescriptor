@@ -151,13 +151,19 @@ StockDescriptor/
 
 ---
 
-## 🔐 API Key & Credential Storage
+## 🔐 API Key & Credential Storage (encrypted)
 
-- On first Gemini key entry in GUI settings, it is saved to:
-  `~/.stockdescriptor/config.json`
-- Stock platform FTP/SFTP credentials are saved separately to:
-  `~/.stockdescriptor/upload_config.json`
-- Both files are created automatically in your home directory
+All confidential data (Gemini API key, stock platform FTP/SFTP passwords) are stored **encrypted**:
+
+- **`~/.stockdescriptor/secrets.enc`** — encrypted keys and passwords (Fernet encryption)
+- **`~/.stockdescriptor/.key`** — encryption key (auto-generated on first launch)
+- **`~/.stockdescriptor/config.json`** — public settings (provider, model, paths, etc.), passwords in this file are **always empty**
+- **`~/.stockdescriptor/upload_config.json`** is **no longer used** — all upload credentials are stored in the main config and encrypted
+
+> 🔒 Passwords are entered via the GUI in the "⚙️ Upload FTP Settings" window and are automatically encrypted on save.
+> Decryption occurs only in RAM when loading the config or running an upload.
+
+- Files are created automatically in your home directory
 - **Never commit these files to git** (they are excluded from the repository)
 - For security: keep your computer password-protected
 

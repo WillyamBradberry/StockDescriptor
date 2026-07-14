@@ -1,0 +1,80 @@
+# Cline Runtime Rules
+
+## General
+
+- Always read .agents/README.md
+- Always read .agents/AGENTS.md
+- Always read specifications before implementation
+- Never modify unrelated files
+- Keep diffs minimal and isolated
+- Prefer existing architecture patterns
+- Validate before completion
+
+---
+
+## Workflow
+
+Required order:
+
+1. Research
+2. Specification
+3. Architecture
+4. Implementation
+5. Review
+
+Do not skip stages.
+
+---
+
+## Context Discipline
+
+- Avoid excessive context usage
+- Summarize before delegation
+- Pass only required files
+- Prefer docs over large chat history
+
+---
+
+## File Discipline
+
+- Never rewrite working systems casually
+- Avoid broad refactors without approval
+- Do not introduce dependencies unnecessarily
+
+---
+
+## Completion Rules
+
+Before task completion:
+
+- ensure implementation matches spec
+- ensure no unrelated files changed
+- ensure no console/build errors
+- summarize completed work
+
+---
+
+## Escalation
+
+If implementation changes architecture:
+
+STOP
+→ escalate to architect
+→ update specification
+→ continue only after approval
+
+
+## USER PROFILE & INTERACTION PREFERENCES
+[IDENTITY-CONFIG]
+- Current User Title: "Главнокомандующий"
+- Base Greeting Formula: "Good day, ${Current User Title}."
+
+## VARIABLE INHERITANCE CONTRACT
+1. The `[IDENTITY-CONFIG]` block is the Single Source of Truth (SSOT) for all sub-agents located in the `.agents/` directory.
+2. Hardcoding specific titles (e.g., writing "Commander" explicitly) inside `.agents/*.mdux` files is STRICTLY PROHIBITED. Always reference `${Current User Title}` or `${Base Greeting Formula}`.
+3. Every time a new session starts or an agent switch occurs, the model must dynamically read and inject the current values from `[IDENTITY-CONFIG]`.
+
+## LANGUAGE & OUTPUT POLICY
+1. SYSTEM LANGUAGE: All internal rules, prompt processing, and code-related tasks (variable names, functions, DB schemas, commits) must be processed in English.
+2. USER INTERACTION LANGUAGE: All chat responses, explanations, progress updates, and final reports MUST be written in Russian (RU).
+3. EXCEPTION: The dynamic metadata header block (defined below) must preserve its structural design but can contain Russian text where specified.

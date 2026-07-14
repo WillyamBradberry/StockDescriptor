@@ -43,8 +43,6 @@ try:
         upload_shutterstock,
         upload_adobe,
         upload_pond5,
-        load_upload_config,
-        save_upload_config
     )
 except ImportError as e:
     print(f"Import error: {e}")
@@ -913,7 +911,8 @@ class UploadSettingsWindow(ctk.CTkToplevel):
         super().__init__(parent)
         self.parent = parent
         self.lang = lang
-        self.upload_config = load_upload_config()
+        # Load upload config from main config (already decrypted by config_manager)
+        self.upload_config = current_config.get("upload_config", {})
         self._password_visible = {}
 
         self.title(parent.tr("upload_settings_title"))
@@ -1056,9 +1055,9 @@ class UploadSettingsWindow(ctk.CTkToplevel):
         cancel_btn.grid(row=0, column=1, padx=10, sticky="w")
 
     def save_and_close(self):
-        new_cfg = {}
+        new_upload_cfg = {}
         for platform, entries in self.platform_entries.items():
-            new_cfg[platform] = {
+            new_upload_cfg[platform] = {
                 "host": entries["host"].get().strip(),
                 "port": int(entries["port"].get().strip() or 22),
                 "username": entries["username"].get().strip(),
@@ -1066,7 +1065,9 @@ class UploadSettingsWindow(ctk.CTkToplevel):
                 "remote_path": entries["remote_path"].get().strip() or "/",
             }
 
-        if save_upload_config(new_cfg):
+        # Save into main config (passwords will be encrypted by config_manager)
+        self.parent.config["upload_config"] = new_upload_cfg
+        if save_config(self.parent.config):
             messagebox.showinfo(self.tr("msg_save_ok_title"), self.tr("upload_save_ok"))
             self.destroy()
         else:

@@ -42,38 +42,7 @@ DEFAULT_UPLOAD_CONFIG = {
     }
 }
 
-CONFIG_DIR = Path.home() / ".stockdescriptor"
-UPLOAD_CONFIG_FILE = CONFIG_DIR / "upload_config.json"
 
-
-def load_upload_config() -> Dict[str, Any]:
-    """Load FTP upload config from user file, merge with defaults."""
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    if UPLOAD_CONFIG_FILE.exists():
-        try:
-            with open(UPLOAD_CONFIG_FILE, "r", encoding="utf-8") as f:
-                user_cfg = json.load(f)
-            # Deep merge with defaults
-            cfg = json.loads(json.dumps(DEFAULT_UPLOAD_CONFIG))  # deep copy
-            for platform in cfg:
-                if platform in user_cfg:
-                    cfg[platform].update(user_cfg[platform])
-            return cfg
-        except Exception as e:
-            print(f"Warning: could not load upload config ({e}), using defaults.")
-    return json.loads(json.dumps(DEFAULT_UPLOAD_CONFIG))
-
-
-def save_upload_config(cfg: Dict[str, Any]) -> bool:
-    """Save FTP upload config to user file."""
-    try:
-        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        with open(UPLOAD_CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(cfg, f, indent=2, ensure_ascii=False)
-        return True
-    except Exception as e:
-        print(f"Error saving upload config: {e}")
-        return False
 
 
 # ================= SFTP UPLOAD HELPERS =================
@@ -132,21 +101,10 @@ def upload_file_sftp(
 # ================= PLATFORM-SPECIFIC UPLOADERS =================
 
 def _get_upload_config(platform: str, config: Dict[str, Any]) -> Dict[str, Any]:
-    """Get upload config for a platform from main config or upload config."""
-    # First check if there's an upload_config key in main config
+    """Get upload config for a platform from main config (with decrypted secrets)."""
     upload_cfg = config.get("upload_config", {})
     if platform in upload_cfg:
         return upload_cfg[platform]
-
-    # Fall back to loading from file
-    try:
-        uc = load_upload_config()
-        if platform in uc:
-            return uc[platform]
-    except Exception:
-        pass
-
-    # Return default
     return DEFAULT_UPLOAD_CONFIG.get(platform, {})
 
 
