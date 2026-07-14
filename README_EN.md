@@ -203,4 +203,12 @@ All log messages from the GUI are now also printed to the terminal/console where
 
 ---
 
+### System Requirements & Model Comparison
+
+|**System Tier**|**Graphics Card (GPU)**|**Vision Models in LM Studio**|**Recommended Hardware Specs**|**Description & Performance**|
+|---|---|---|---|---|
+|**Entry-level**|• NVIDIA RTX 3060 (12GB)<br><br>  <br><br>• NVIDIA RTX 4060 (8GB)<br><br>  <br><br>• AMD RX 7600 (8GB)|• `Moondream2` (1.6B)<br><br>  <br><br>• `Qwen2.5-VL-3B` (Q4/Q8)<br><br>  <br><br>• `Paligemma-3B`|• **RAM:** 16 GB DDR4/DDR5<br><br>  <br><br>• **VRAM:** 8–12 GB<br><br>  <br><br>• **CPU:** 4+ Cores|**Budget-friendly start.** Suitable for fast, sequential processing of simpler images. Models fit entirely within VRAM, delivering tag generation speeds of ~1–3 seconds per image.|
+|**Recommended**|• NVIDIA RTX 4070 (12GB)<br><br>  <br><br>• NVIDIA RTX 4070 Ti Super (16GB)<br><br>  <br><br>• NVIDIA RTX 4080 (16GB)|• `Qwen2.5-VL-7B-Instruct` (Q4/Q8)<br><br>  <br><br>• `Gemma-3-12B-Vision` (Q4)<br><br>  <br><br>• `Pixtral-12B` (Q4)<br><br>  <br><br>• `LLaVA-v1.6-Mistral-7B`|• **RAM:** 32 GB DDR5<br><br>  <br><br>• **VRAM:** 12–16 GB<br><br>  <br><br>• **CPU:** 6+ Cores|**The Sweet Spot.** Perfect balance of speed and description quality. Models in the 7B–12B range excel at recognizing small details, text within images, and complex compositions.|
+|**High-End (Pro)**|• NVIDIA RTX 3090 / 4090 (24GB)<br><br>  <br><br>• Multi-GPU (2x RTX 3090/4090)|• `LLaVA-v1.6-34B` (Q4_K_M)<br><br>  <br><br>• `Qwen2.5-VL-72B` (Q4_K_M)<br><br>  <br><br>• `Gemma-4-26B-Vision` (Q4)|• **RAM:** 64+ GB DDR5<br><br>  <br><br>• **VRAM:** 24+ GB<br><br>  <br><br>• **CPU:** 8+ Cores (High clock speed)|**Maximum Quality.** Best for deep texture analysis, tricky camera angles, and generating highly detailed, commercial-grade descriptions. Handles heavy models without context trimming.|
+
 **Happy stock photo processing!** 🦈📸
