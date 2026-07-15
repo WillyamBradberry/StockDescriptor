@@ -19,13 +19,18 @@ if (-not (Test-Path $thumbsFolder)) {
     Write-Host "✅ Created folder: $thumbsFolder" -ForegroundColor Green
 }
 
-# Python скрипт для обработки изображений: записываем во временный .py файл
+# Python скрипт для обработки изображений
 $pyContent = @'
 import os
 import sys
 from PIL import Image
 
-# placeholders will be replaced by PowerShell
+# Force standard output and error to use UTF-8 encoding
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout.reconfigure(encoding='utf-8')
+if sys.stderr.encoding != 'utf-8':
+    sys.stderr.reconfigure(encoding='utf-8')
+
 image_folder = r"__IMAGEFOLDER__"
 thumbs_folder = r"__THUMBSFOLDER__"
 
@@ -44,7 +49,6 @@ for filename in jpg_files:
     filepath = os.path.join(image_folder, filename)
     output_path = os.path.join(thumbs_folder, filename)
 
-    # Skip if thumbnail already exists
     if os.path.exists(output_path):
         print(f'⏭️  {filename} (already exists, skipped)')
         print()
@@ -54,7 +58,6 @@ for filename in jpg_files:
         img = Image.open(filepath)
         w, h = img.size
 
-        # Resize proportionally only if width > max_width
         if w > max_width:
             new_w = max_width
             new_h = int(h * (new_w / w))
@@ -80,22 +83,25 @@ print('Processing completed!')
 
 Write-Host "Starting image processing..." -ForegroundColor Cyan
 
-# Создаем временный python файл в %TEMP%
 $tempPy = Join-Path -Path $env:TEMP -ChildPath ("resize_for_vision_{0}.py" -f ([System.Guid]::NewGuid().ToString()))
 
-# Заменяем плейсхолдеры безопасно (экранируем обратные слэши)
 $safeImageFolder = $ImageFolder -replace "\\", "\\\\"
 $safeThumbsFolder = $thumbsFolder -replace "\\", "\\\\"
 
 $pyContent = $pyContent -replace "__IMAGEFOLDER__", $safeImageFolder
 $pyContent = $pyContent -replace "__THUMBSFOLDER__", $safeThumbsFolder
 
-$pyContent | Out-File -FilePath $tempPy -Encoding UTF8
+# CRITICAL FIX 1: Write file with UTF-8 encoding explicitly (without BOM if possible, using Out-File -Encoding utf8)
+$pyContent | Out-File -FilePath $tempPy -Encoding utf8
 
-# Получаем путь к Python из venv (ищем venv рядом с репозиторием root)
 $repoRoot = Split-Path -Path $PSScriptRoot -Parent
 $pythonExe = Join-Path -Path $repoRoot -ChildPath "venv\Scripts\python.exe"
 if (-not (Test-Path $pythonExe)) { $pythonExe = "python" }
+
+# CRITICAL FIX 2: Set environment variable so Python's IO stack defaults to UTF8 
+# and tell Windows PowerShell to expect UTF8 console outputs
+$env:PYTHONIOENCODING = "utf-8"
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Запускаем временный python скрипт
 & $pythonExe $tempPy
@@ -113,7 +119,6 @@ Write-Host "=== Resize Complete ===" -ForegroundColor Green
 Write-Host "Thumbnails saved to: $thumbsFolder" -ForegroundColor Green
 Write-Host ""
 
-# Предлагаем запустить write_exif.ps1
 $writeExifPath = Join-Path -Path (Split-Path -Path $ImageFolder) -ChildPath 'write_exif.ps1'
 
 if (Test-Path $writeExifPath) {
