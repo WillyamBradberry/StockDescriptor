@@ -83,7 +83,7 @@ Uploaded files are moved into a `_UPLOADED/` folder so they are not re-uploaded 
 ### 2. 🤖 AI Metadata Generation
 `processing/batch_metadata.py` now supports **two providers**:
 - **LM Studio** (default, local, OpenAI-compatible endpoint)
-- **Google Gemini** (online, requires API key)
+- **Google Gemini** (online, requires API key) - [get your API key HERE](https://aistudio.google.com/api-keys)
 
 Supports resume, --check-errs, mock mode, incremental writing.
 

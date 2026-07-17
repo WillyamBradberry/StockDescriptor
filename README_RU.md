@@ -81,7 +81,8 @@ StockDescriptor v2.2 может загружать обработанные JPG 
 ### 2. 🤖 AI-генерация метаданных
 `processing/batch_metadata.py` теперь поддерживает **два провайдера**:
 - **LM Studio** (по умолчанию, локально, OpenAI-совместимый эндпоинт)
-- **Google Gemini** (онлайн, требуется API ключ)
+- **Google Gemini** (онлайн, требуется API ключ) [Получить ключ можно здесь](https://aistudio.google.com/api-keys)
+
 
 Поддерживает resume, --check-errs, mock-режим, инкрементальную запись.
 
